@@ -5,3 +5,4 @@
 **/*_test.go
 *.sqlite*
 *.xlsx
+**/*.pb.go

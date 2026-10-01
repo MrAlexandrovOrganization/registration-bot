@@ -31,7 +31,12 @@ Python-зависимости закреплены в requirements-tools.txt. `f
 goimports, go fix и Ruff. `check` — формат, генерация, vet, fake-тесты и Compose
 на синтетических значениях, Gitleaks из `versions.mk` с redaction для версионируемых файлов;
 ни одного реального Telegram-запроса. Docker нужен для Compose и secret scan.
-Generated protobuf включён в репозиторий, frontend собирается независимо.
+Generated `*.pb.go` игнорируются Git, как в notes-bot. `make build`, `test`,
+`test-race`, `check`, `format` и `run` сначала выполняют `proto-gen`.
+Для прямых Go-команд после checkout сначала выполнить `make proto-gen`.
+Docker исключает локальный generated-код и сам генерирует его в build-stage
+закреплёнными инструментами. Проверка генерации/компиляции заменяет сравнение
+с закоммиченными файлами. Frontend по-прежнему собирается независимо.
 Canonical source — backend `api/registration.proto`; местный файл является
 snapshot контракта v1, меняется только согласованно с backend. `go_package`
 переопределяется генератором, не ручной правкой generated-файлов.

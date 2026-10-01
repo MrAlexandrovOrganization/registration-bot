@@ -8,3 +8,4 @@
 *.sqlite*
 coverage.out
 __pycache__/
+*.pb.go

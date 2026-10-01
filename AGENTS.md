@@ -1,7 +1,8 @@
 # Registration Telegram frontend
 
 Read README. Independent Go 1.26.1 module; no sibling checkout required.
-Backend owns canonical protobuf; this repo includes a versioned snapshot and generated client.
+Backend owns canonical protobuf; this repo includes a versioned .proto snapshot.
+Generated *.pb.go are ignored. Make generates before Go checks/build/run; Docker generates independently.
 Never connect to PostgreSQL/SQLite here. Domain decisions and permissions belong to backend.
 Use internal/resources for user-visible text, tgfmt.Escape for every dynamic value.
 All content sends go through the common sender/limiter, never directly from polling handlers.
