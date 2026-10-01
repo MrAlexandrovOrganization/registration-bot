@@ -1,0 +1,10 @@
+.env
+.env.*
+!.env.example
+.bin/
+.tools/
+.DS_Store
+*.xlsx
+*.sqlite*
+coverage.out
+__pycache__/

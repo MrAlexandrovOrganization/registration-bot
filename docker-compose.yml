@@ -1,0 +1,53 @@
+name: registration-telegram
+services:
+  telegram:
+    build:
+      context: .
+      args:
+        GO_VERSION: ${GO_VERSION:?Run via make}
+        GO_ALPINE_VERSION: ${GO_ALPINE_VERSION:?Run via make}
+        ALPINE_VERSION: ${ALPINE_VERSION:?Run via make}
+    restart: unless-stopped
+    environment:
+      BOT_TOKEN: ${BOT_TOKEN:?required}
+      BACKEND_TOKEN: ${BACKEND_TOKEN:?required}
+      BACKEND_ADDR: registration-backend:50051
+      ALLOW_INSECURE_GRPC: 'true'
+      HTTP_LISTEN: ':9091'
+      KAFKA_BROKERS: kafka:9092
+      KAFKA_TOPIC_PREFIX: registration.telegram
+      KAFKA_GROUP: registration-telegram
+      TOTAL_RATE: '20'
+      BROADCAST_RATE: '15'
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4317
+      OTEL_EXPORTER_OTLP_INSECURE: 'true'
+    networks: [api, kafka, jaeger, prometheus]
+    ports: ['127.0.0.1:9091:9091']
+    healthcheck:
+      test: [CMD, wget, -q, -O, /dev/null, 'http://127.0.0.1:9091/livez']
+      interval: 15s
+      timeout: 3s
+      retries: 3
+    stop_grace_period: 30s
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    logging:
+      driver: json-file
+      options: {max-size: 10m, max-file: '3'}
+    mem_limit: 256m
+    cpus: 1.0
+networks:
+  api:
+    external: true
+    name: registration-api
+  kafka:
+    external: true
+    name: kafka-net
+  jaeger:
+    external: true
+    name: jaeger-net
+  prometheus:
+    external: true
+    name: prometheus-net
