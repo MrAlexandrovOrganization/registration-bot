@@ -61,7 +61,11 @@ func Render(v *pb.View) (tgfmt.HTML, Markup) {
 	case "notice":
 		appendText(Text(v.Code))
 	case "help", "about", "bring", "poll":
-		appendText(Text(v.Kind))
+		if v.Kind == "help" && v.Code == "help_registration" {
+			appendText(Text(v.Code))
+		} else {
+			appendText(Text(v.Kind))
+		}
 	case "permissions":
 		appendText(Text("permissions_title"))
 		for _, f := range v.Fields {
@@ -69,6 +73,9 @@ func Render(v *pb.View) (tgfmt.HTML, Markup) {
 		}
 	case "stats":
 		appendText(Text("stats_title"))
+		for _, f := range v.Fields {
+			appendText("\n" + Text(f.Key) + ": " + f.Value)
+		}
 		for i, n := range v.Numbers {
 			appendText("\n" + Text("stats_"+strconv.Itoa(i)) + ": " + strconv.FormatInt(n, 10))
 		}

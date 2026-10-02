@@ -24,6 +24,17 @@ func TestAllSurveyResourcesExist(t *testing.T) {
 	}
 }
 
+func TestRegistrationOnlyViews(t *testing.T) {
+	text, _ := Render(&pb.View{Kind: "stats", Fields: []*pb.Field{{Key: "stats_0", Value: "4"}, {Key: "stats_7", Value: "1"}}})
+	if !strings.Contains(string(text), "Всего пользователей: 4") || strings.Contains(string(text), "Подтвердили участие") {
+		t.Fatal("invalid registration statistics")
+	}
+	text, _ = Render(&pb.View{Kind: "help", Code: "help_registration"})
+	if strings.Contains(string(text), "/poll") || strings.Contains(string(text), "yes, maybe") {
+		t.Fatal("disabled participation advertised")
+	}
+}
+
 func TestSourceStats(t *testing.T) {
 	text, _ := Render(&pb.View{Kind: "sources", Numbers: []int64{1, 2}, Fields: []*pb.Field{
 		{Key: "", Value: "3"}, {Key: ":unknown", Value: "4"}, {Key: "<b>A&B</b>", Value: "5"},

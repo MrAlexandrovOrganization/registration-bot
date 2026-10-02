@@ -28,6 +28,7 @@
   "about": "Информация о новом выезде будет опубликована организаторами.",
   "bring": "Список вещей для нового выезда будет опубликован организаторами.",
   "help": "/start — анкета\n/cancel — выйти из текущего действия\n/about — о выезде\n/bring — что взять\n/my_permissions — мои права\n\nДля организаторов:\n/stats — статистика\n/sources [СТРАНИЦА] — первые запуски по меткам ссылок\n/export — XLSX в личном чате\n/broadcast АУДИТОРИЯ — подготовить рассылку\n/poll АУДИТОРИЯ — подготовить опрос участия\nАудитории: all, registered, incomplete, yes, maybe, staff, counselor\n/send ID — подтвердить и запустить рассылку\n/progress ID — прогресс\n/pause ID, /resume ID — пауза и продолжение\n/cancel_broadcast ID — отменить оставшееся\n/retry ID — повторить временные ошибки\n/grant_permission USER_ID ПРАВО\n/revoke_permission USER_ID ПРАВО\nПрава: admin, table_viewer, message_sender, staff\n/register_staff_chat, /register_counselor_chat, /register_superuser_chat — выполнить в нужной группе\n/sync_staff_chat, /sync_counselor_chat — проверить членство известных пользователей",
+  "help_registration": "/start — анкета",
   "permissions_title": "Права доступа", "stats_title": "Статистика регистрации",
   "sources_hint": "Источники первых запусков: /sources",
   "sources_title": "Источники первых запусков — уникальные пользователи. Повторные запуски не учитываются.",
