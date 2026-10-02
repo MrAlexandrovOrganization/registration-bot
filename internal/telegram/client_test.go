@@ -13,6 +13,24 @@ import (
 	"registration.local/frontend/internal/tgfmt"
 )
 
+func TestLocalAPIClient(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/bot1000:synthetic/getMe" {
+			t.Error("incorrect API path")
+		}
+		_, _ = w.Write([]byte(`{"ok":true,"result":{"id":1000}}`))
+	}))
+	defer server.Close()
+	c := New("1000:synthetic", server.URL+"/")
+	var user User
+	if err := c.Call(t.Context(), "getMe", struct{}{}, &user); err != nil || user.ID != 1000 {
+		t.Fatal("local API call failed", err)
+	}
+	if New("1000:synthetic", "").Base != "https://api.telegram.org/bot1000:synthetic/" {
+		t.Fatal("public fallback changed")
+	}
+}
+
 func TestTelegramTransport(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var input struct {

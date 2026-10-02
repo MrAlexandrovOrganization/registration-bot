@@ -6,6 +6,7 @@ import (
 )
 
 func TestBotIDFromToken(t *testing.T) {
+	t.Setenv("TELEGRAM_LOCAL_API_URL", "")
 	t.Setenv("BACKEND_TOKEN", strings.Repeat("x", 32))
 	t.Setenv("ALLOW_INSECURE_GRPC", "true")
 	t.Setenv("TOTAL_RATE", "20")
@@ -35,6 +36,21 @@ func TestBotIDFromToken(t *testing.T) {
 			}
 		} else if err == nil || err.Error() != "invalid BOT_TOKEN format" {
 			t.Fatalf("expected safe token format error, got %v", err)
+		}
+	}
+}
+
+func TestTelegramOrigin(t *testing.T) {
+	for _, raw := range []string{"", "http://telegram-bot-api:8081", "https://example.invalid/"} {
+		got, err := telegramOrigin(raw)
+		if err != nil || got != strings.TrimRight(raw, "/") {
+			t.Fatalf("valid origin rejected: %v", err)
+		}
+	}
+	for _, raw := range []string{"http://user:synthetic@host", "http://host/botTOKEN", "http://host?secret=synthetic", "http://host#fragment", "ftp://host", "http://host:99999", "http://host/%2f"} {
+		_, err := telegramOrigin(raw)
+		if err == nil || strings.Contains(err.Error(), raw) {
+			t.Fatal("invalid origin accepted or leaked")
 		}
 	}
 }

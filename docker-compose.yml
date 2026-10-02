@@ -11,6 +11,7 @@ services:
     environment:
       BOT_TOKEN: ${BOT_TOKEN:?required}
       BACKEND_TOKEN: ${BACKEND_TOKEN:?required}
+      TELEGRAM_LOCAL_API_URL: http://telegram-bot-api:8081
       BACKEND_ADDR: registration-backend:50052
       ALLOW_INSECURE_GRPC: 'true'
       HTTP_LISTEN: ':9093'
@@ -21,7 +22,7 @@ services:
       BROADCAST_RATE: '15'
       OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4317
       OTEL_EXPORTER_OTLP_INSECURE: 'true'
-    networks: [api, kafka, jaeger, prometheus]
+    networks: [api, kafka, jaeger, prometheus, telegram]
     ports: ['127.0.0.1:9093:9093']
     healthcheck:
       test: [CMD, wget, -q, -O, /dev/null, 'http://127.0.0.1:9093/livez']
@@ -39,6 +40,9 @@ services:
     mem_limit: 256m
     cpus: 1.0
 networks:
+  telegram:
+    external: true
+    name: telegram-net
   api:
     external: true
     name: registration-api

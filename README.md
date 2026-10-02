@@ -81,6 +81,7 @@ SSH tunnel к одному порту не исправляет advertised addre
 | Переменная | Назначение |
 |---|---|
 | `BOT_TOKEN` | Telegram token; ID бота определяется автоматически из префикса токена |
+| `TELEGRAM_LOCAL_API_URL` | Доверенный Bot API origin; в Compose http://telegram-bot-api:8081 через внешнюю telegram-net, пустое значение на хосте — публичный API |
 | `BACKEND_TOKEN` | Общий секрет backend, минимум 32 символа |
 | `BACKEND_ADDR` | gRPC endpoint |
 | `GRPC_CA_FILE` | CA для TLS backend |
@@ -96,6 +97,9 @@ SSH tunnel к одному порту не исправляет advertised addre
 
 Webhook не используется и не регистрируется автоматически. Не запускать
 одновременно Python/Go pollers или две frontend-реплики для одного token.
+Compose использует существующий local Telegram Bot API; он должен быть запущен
+в local mode и подключён к telegram-net. URL задаётся без токена и API path;
+запросы getMe/getUpdates и отправки используют один клиент. Host-порты не добавляются.
 
 ## Пользовательские сценарии
 

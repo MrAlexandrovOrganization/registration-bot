@@ -2,6 +2,7 @@ package app
 
 import (
 	"errors"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -13,6 +14,7 @@ type Config struct {
 	Brokers                                               []string
 	TotalRate, BulkRate                                   int
 	Insecure                                              bool
+	TelegramLocalAPI                                      string
 }
 
 func env(key, fallback string) string {
@@ -47,5 +49,28 @@ func Load() (Config, error) {
 	if !c.Insecure && c.CA == "" {
 		return c, errors.New("GRPC_CA_FILE required unless plaintext explicitly enabled")
 	}
+	c.TelegramLocalAPI, err = telegramOrigin(os.Getenv("TELEGRAM_LOCAL_API_URL"))
+	if err != nil {
+		return c, err
+	}
 	return c, nil
+}
+
+func telegramOrigin(raw string) (string, error) {
+	if raw == "" {
+		return "", nil
+	}
+	u, err := url.Parse(raw)
+	if err != nil || u.Hostname() == "" || u.User != nil || u.Opaque != "" ||
+		(u.Scheme != "http" && u.Scheme != "https") || (u.Path != "" && u.Path != "/") ||
+		strings.ContainsAny(raw, "?#%\\") {
+		return "", errors.New("invalid TELEGRAM_LOCAL_API_URL origin")
+	}
+	if u.Port() != "" {
+		port, err := strconv.Atoi(u.Port())
+		if err != nil || port < 1 || port > 65535 {
+			return "", errors.New("invalid TELEGRAM_LOCAL_API_URL port")
+		}
+	}
+	return strings.TrimRight(raw, "/"), nil
 }

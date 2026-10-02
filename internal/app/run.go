@@ -75,7 +75,7 @@ func Run(ctx context.Context, c Config) error {
 		w.WriteHeader(200)
 	})
 	server := &http.Server{Addr: c.HTTP, Handler: mux, ReadHeaderTimeout: 3 * time.Second, ReadTimeout: 5 * time.Second, WriteTimeout: 10 * time.Second, IdleTimeout: 30 * time.Second}
-	tg := telegram.New(c.Token)
+	tg := telegram.New(c.Token, c.TelegramLocalAPI)
 	limiter := delivery.NewLimiter(c.TotalRate, c.BulkRate)
 	run, stop := context.WithCancel(ctx)
 	defer stop()

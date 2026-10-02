@@ -10,6 +10,7 @@ import (
 	"mime/multipart"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"registration.local/frontend/internal/resources"
@@ -27,8 +28,13 @@ type APIError struct {
 }
 
 func (e *APIError) Error() string { return fmt.Sprintf("telegram request failed (code=%d)", e.Code) }
-func New(token string) *Client {
-	return &Client{Base: "https://api.telegram.org/bot" + token + "/", HTTP: &http.Client{Timeout: 40 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}}
+
+// localOrigin is validated at startup; empty uses the public Bot API.
+func New(token, localOrigin string) *Client {
+	if localOrigin == "" {
+		localOrigin = "https://api.telegram.org"
+	}
+	return &Client{Base: strings.TrimRight(localOrigin, "/") + "/bot" + token + "/", HTTP: &http.Client{Timeout: 40 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}}
 }
 func (c *Client) request(ctx context.Context, method, contentType string, body io.Reader, result any) error {
 	req, err := http.NewRequestWithContext(ctx, "POST", c.Base+method, body)
