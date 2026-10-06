@@ -60,7 +60,7 @@ func Render(v *pb.View) (tgfmt.HTML, Markup) {
 		appendText(Text("edit_title"))
 	case "notice":
 		appendText(Text(v.Code))
-	case "help", "about", "bring", "poll":
+	case "help", "help_public", "about", "bring", "poll":
 		if v.Kind == "help" && v.Code == "help_registration" {
 			appendText(Text(v.Code))
 		} else {

@@ -8,8 +8,8 @@ Go и protoc-gen-go берутся из `go.mod`; образы и остальн
 проверок и CI. Сборка образа: `make compose-build`; запуск: `make up`.
 После изменения инструментов повторите `make install`.
 
-Go-frontend для регистрации: long polling, представление анкеты, получение
-заданий из Kafka и вызовы Telegram API. Backend владеет всеми данными и правами;
+Go-frontend для регистрации: webhook или long polling, представление анкеты,
+интерактивная доставка через gRPC и рассылки через Kafka. Backend владеет всеми данными и правами;
 здесь нет драйвера PostgreSQL, SQLite, копии анкеты или бизнес-правил валидации.
 
 ## Подготовка
@@ -41,16 +41,25 @@ Canonical source — backend `api/registration.proto`; местный файл �
 snapshot контракта v1, меняется только согласованно с backend. `go_package`
 переопределяется генератором, не ручной правкой generated-файлов.
 
-CI на PR и push main вызывает те же Make-цели и сборку контейнера. Автодеплоя
-пока нет. Публикация Git-репозиториев и первое переключение — отдельные операции.
+CI на PR и push main вызывает `make install`, `make check`, `make test-race`,
+`make build`; отдельный job выполняет `make compose-build`. SSH CD зависит от обоих
+jobs и включается repository variable `DEPLOY_ENABLED=true` только для push main.
+По умолчанию деплой пропущен. Репозитории пока не опубликованы; provisioning и
+coordinated rollout migration 004 описаны в [OPERATIONS.md](docs/OPERATIONS.md).
+Все jobs используют `ubuntu-24.04`. Deploy использует environment `production`,
+обновляет main fast-forward до проверенного SHA
+и вызывает `make up`, как при локальном запуске. Эта цель собирает образ и ждёт
+готовности по healthcheck до 180 секунд (`--wait --wait-timeout 180`).
 
 ## Запуск
 
-Подготовить `.env` из `.env.example`: в нём только `BOT_TOKEN` и `BACKEND_TOKEN`.
-Адреса, лимиты, Kafka и настройки наблюдаемости заданы явно в
-`docker-compose.yml`; для изменения этих значений `.env` не используется.
+Подготовить `.env` из `.env.example`: `BOT_TOKEN`, `BACKEND_TOKEN` и отдельный
+`TELEGRAM_WEBHOOK_SECRET` для webhook-режима (в polling не используется).
+`WEBHOOK_URL` в `.env` включает webhook (пустое значение — polling).
+Остальные адреса, лимиты, Kafka и наблюдаемость заданы явно в `docker-compose.yml`.
 
-Запуск требует подготовленного backend и топиков Kafka. Бот запускается командой
+Backend обязателен; топик Kafka нужен для рассылок. Интерактивные ответы работают
+и при недоступной Kafka. Бот запускается командой
 `make up`, останавливается через `make down`; дополнительный флаг включения не нужен.
 ID бота вычисляется из числовой части `BOT_TOKEN` перед двоеточием;
 проверка `getMe` сверяет с ним идентичность бота. Отдельный `BOT_ID` frontend не нужен.
@@ -63,12 +72,12 @@ make down
 ```
 
 На VM используются external networks `registration-api`, `kafka-net`, `jaeger-net`
-и `prometheus-net`. Backend доступен как `registration-backend:50051`, Kafka —
+и `prometheus-net`. Backend доступен как `registration-backend:50052`, Kafka —
 `kafka:9092`, OTLP gRPC — `http://jaeger:4317` (без TLS внутри Docker-сети),
 как в `notes-bot`. PostgreSQL к frontend не подключена.
 
 Для запуска вне Docker `make run` читает экспортированные переменные shell,
-не `.env` и не Compose. Дополнительно к двум переменным из `.env` нужно задать
+не `.env` и не Compose. Дополнительно к секретам из `.env` нужно задать
 доступные с хоста `BACKEND_ADDR`, `KAFKA_BROKERS`, `HTTP_LISTEN=127.0.0.1:9091`,
 и `ALLOW_INSECURE_GRPC=true` для доверенного внутреннего соединения
 (либо `GRPC_CA_FILE` для TLS). Остальные переменные имеют значения по умолчанию;
@@ -87,19 +96,52 @@ SSH tunnel к одному порту не исправляет advertised addre
 | `GRPC_CA_FILE` | CA для TLS backend |
 | `ALLOW_INSECURE_GRPC` | Явное разрешение plaintext только в доверенной сети одной VM |
 | `KAFKA_BROKERS` | Через запятую; `kafka:9092` по умолчанию |
-| `KAFKA_TOPIC_PREFIX` | `registration.telegram`, должен совпадать с backend |
+| `KAFKA_TOPIC_PREFIX` | `registration.telegram`, должен совпадать с backend; используется только `.broadcast.v1` |
 | `KAFKA_GROUP` | `registration-telegram`, не использовать чужую группу |
 | `TOTAL_RATE` | 20 по умолчанию, диапазон 1..25 |
 | `BROADCAST_RATE` | 15 по умолчанию, строго меньше TOTAL_RATE |
 | `HTTP_LISTEN` | `:9091`; Compose публикует только host loopback |
+| `WEBHOOK_URL` | Пусто — polling; HTTPS URL — webhook. Без credentials, query и fragment |
+| `TELEGRAM_WEBHOOK_SECRET` | Обязателен для webhook: 1–256 символов `A-Z a-z 0-9 _ -`; отдельный секрет заголовка Telegram |
+| `WEBHOOK_LISTEN_ADDR` | `:8080`; отдельный HTTP listener webhook за TLS reverse proxy, точный путь из `WEBHOOK_URL` |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | В Compose `http://jaeger:4317`; вне Compose необязателен |
 | `OTEL_EXPORTER_OTLP_INSECURE` | В Compose true: OTLP без TLS внутри `jaeger-net` |
 
-Webhook не используется и не регистрируется автоматически. Не запускать
-одновременно Python/Go pollers или две frontend-реплики для одного token.
 Compose использует существующий local Telegram Bot API; он должен быть запущен
 в local mode и подключён к telegram-net. URL задаётся без токена и API path;
-запросы getMe/getUpdates и отправки используют один клиент. Host-порты не добавляются.
+запросы getMe/getUpdates, отправки и явные команды управления webhook используют
+один настроенный API origin.
+
+### Режим получения обновлений
+
+При пустом `WEBHOOK_URL` работает polling. При заданном URL запускается отдельный
+webhook listener. Оба режима проверяют `getMe` и совпадение ID с token; одновременно
+Python/Go pollers или две frontend-реплики для одного token запускать нельзя.
+
+Webhook принимает только POST с `X-Telegram-Bot-Api-Secret-Token`; сравнение SHA-256
+секрета выполняется constant-time. Тело ограничено 1 MiB, допускается ровно один JSON
+update, очередь — 100 элементов, один consumer. Не более 101 запроса одновременно
+читают тело/ожидают сохранения. Перегрузка, отмена и ошибка backend дают HTTP 503,
+неуспешная авторизация — 401, неверное тело — 400/413. HTTP 200 для обрабатываемого
+update возвращается **после durable Accept**, не после постановки в память и не после
+отправки ответа пользователю. Неподдерживаемые виды update игнорируются без эффектов.
+Ожидание в очереди и обработка ограничены 20 секундами; shutdown отменяет ожидания
+и активный RPC, Telegram может безопасно повторить неподтверждённый update.
+Порядок очереди — порядок поступления; backend дедуплицирует повторы и проверяет
+версию callback. Регистрация использует `max_connections=1` для последовательной доставки.
+
+Startup/shutdown не вызывают setWebhook/deleteWebhook. Отдельные команды бинарника
+с настроенным окружением: `.bin/telegram register-webhook` и
+`.bin/telegram delete-webhook`; обе сохраняют pending updates. Перед переходом на
+polling webhook нужно явно удалить. Обычные тесты проверяют эти команды только
+на fake Telegram. HTTP health/metrics остаётся на `HTTP_LISTEN`, не на webhook listener.
+
+Для Compose: `make register-webhook` / `make delete-webhook` запускают готовый CLI
+в одноразовом контейнере без запуска frontend или зависимостей. Перед этим собрать
+актуальный образ через `make compose-build`. Это реальные Telegram-операции.
+Webhook опубликован на `127.0.0.1:9083` → контейнер `8080`; TLS reverse proxy на хосте
+должен передавать точный путь из `WEBHOOK_URL` и секретный заголовок без логирования.
+Health/metrics Compose: `127.0.0.1:9093`. Порядок переключения — в OPERATIONS.
 
 ## Пользовательские сценарии
 
@@ -109,6 +151,26 @@ Compose использует существующий local Telegram Bot API; о
 действия. Callback защищён версией состояния; старые кнопки предлагают `/start`.
 Принятый update подтверждается в Telegram только после backend commit; повторы
 дедуплицируются PostgreSQL. Callback spinner закрывается после сохранения.
+`Receipt.delivery_ids` передаются sender даже при `duplicate=true`: предыдущий
+ответ Accept мог потеряться. Ожидания отправки перед подтверждением update нет.
+
+Подходящие callback-переходы редактируют исходное сообщение. Frontend передаёт
+`callback_message_editable` только для доступного текстового сообщения этого бота
+в этом чате; inline/inaccessible/media и сообщения пользователя не подходят.
+Backend выбирает `Delivery.edit_message_id` для допустимого private view; запрос
+телефона с reply keyboard, уведомления, экспорт и рассылки остаются новыми сообщениями.
+Редактирование использует тот же HTML renderer и inline markup. «Message is not
+modified» — успешная доставка; fallback в новое сообщение разрешён только для
+«message to edit not found»/«message can't be edited» и повторно проходит общий
+limiter. Сетевые/неоднозначные ошибки не вызывают немедленной второй отправки.
+
+Публичная `/help` (`help_public`) содержит `/start`, `/cancel`, `/about`, `/bring`,
+`/help`, без административных команд. Отдельного интерфейса участника нет.
+Недоступные административные и неизвестные команды молча завершаются в backend:
+нет outbox-ответа, отказа или подсказки. Выбор операторской справки и проверка доступа
+при приёме команды и выдаче queued ответа — backend. Отменённый ответ возвращается
+из Claim как `id=0`, frontend ничего не отправляет. Ошибки анкеты, некорректное
+содержимое сообщения (`invalid_content`) и обычная информация продолжают отображаться.
 
 Тексты, вопросы и справка команд — `internal/resources/texts.json`; отображение —
 типизированный View renderer. HTML компонуется пакетом `tgfmt`, все динамические
@@ -164,14 +226,24 @@ startup сам миграции не запускает.
 
 ### Доставка сообщений
 
-Два топика `<prefix>.interactive.v1` и `<prefix>.broadcast.v1`, отдельные consumer
-groups. В приоритете интерактивные ответы. Один активный sender, общий limiter
+Kafka используется только для `<prefix>.broadcast.v1`, группа `<group>-broadcast`.
+Интерактивные ответы поступают непосредственно из Accept и через периодический
+`PendingInteractive(limit=100)` при старте и далее каждую секунду (при ошибках RPC
+backoff до 15 секунд). Нет cursor: повторное discovery находит due retries,
+expired leases, exports, sync continuations и milestones независимо от Kafka.
+Fast-path и recovery имеют по 100 мест и общую дедупликацию queued/in-flight ID;
+переполнение отбрасывает только подсказки, durable задания остаются в backend.
+Sender выбирает fast-path, recovery и broadcast без голодающей очереди.
+
+Один активный sender и worker identity, общий Claim/Complete и limiter:
 20/сек, массовая отправка 15/сек, один чат 1/сек, группа 20/мин без bursts.
 Это верхние ограничения, не обещанная скорость: HTTP latency тоже влияет.
 
 Kafka payload — ID задания. Содержимое, право владения, срок lease и статус
-выдаёт backend. После Telegram HTTP sender сохраняет результат через gRPC и
-лишь затем подтверждает Kafka offset. При недоступном backend новые отправки
+выдаёт backend. После Telegram HTTP sender сохраняет результат через gRPC с новым
+ограниченным reporting context; для broadcast лишь затем подтверждает Kafka offset.
+Fetch, повторы и commit Kafka выполняются вне sender и не блокируют direct/recovery.
+При недоступном backend новые отправки
 останавливаются. При потере результата PostgreSQL scheduler восстановит задание.
 
 `429` сохраняет retry_after и общий cooldown через backend; повтор не расходует
@@ -180,6 +252,11 @@ content error приостанавливает рассылку. Отмена н
 Exactly-once Telegram невозможен: принятый Telegram запрос с потерянным ответом
 может быть повторён. `sent` означает принятие Telegram, не прочтение человеком.
 
+Переход требует согласованного backend с миграцией 004 и нового frontend: старый
+frontend не читает delivery IDs, а новый backend больше не публикует interactive
+в Kafka. Proto snapshot здесь побайтово соответствует canonical backend; сборка
+и тесты не требуют соседнего checkout. Статусы/leases старых заданий не сбрасываются.
+
 ## Наблюдаемость
 
 JSON stdout с UTC time/service/level и trace_id/span_id активного контекста.
@@ -187,8 +264,10 @@ JSON stdout с UTC time/service/level и trace_id/span_id активного к�
 Telegram errors преобразуются в безопасные коды. В тестах проверены HTTP и
 сетевые ошибки с синтетическим секретом.
 
-HTTP `/livez` — процесс, `/readyz` — свежесть успешных polling/backend sender
-проверок. `/metrics`: `registration_telegram_updates_total`,
+HTTP `/livez` — процесс, `/readyz` — свежесть успешных backend sender проверок и,
+в polling-режиме, Telegram polling. В webhook-режиме отсутствие входящих запросов
+не делает сервис неготовым; Kafka не является зависимостью готовности interactive.
+`/metrics`: `registration_telegram_updates_total`,
 `registration_telegram_delivery_total`, runtime metrics. Kafka lag контролируется
 средствами общей Kafka; старейшее outbox-задание — метрикой backend.
 Compose подключает frontend к `jaeger-net` и `prometheus-net`, как `notes-bot`.

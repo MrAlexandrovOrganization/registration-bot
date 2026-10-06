@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"errors"
+	"net"
 	"net/http"
 	"sync"
 	"sync/atomic"
@@ -68,7 +69,7 @@ func Run(ctx context.Context, c Config) error {
 	mux.Handle("/metrics", promhttp.HandlerFor(registry, promhttp.HandlerOpts{}))
 	mux.HandleFunc("GET /livez", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) })
 	mux.HandleFunc("GET /readyz", func(w http.ResponseWriter, r *http.Request) {
-		if time.Now().Unix()-polling.Load() > 90 || time.Now().Unix()-sending.Load() > 90 {
+		if (c.WebhookURL == "" && time.Now().Unix()-polling.Load() > 90) || time.Now().Unix()-sending.Load() > 90 {
 			http.Error(w, "dependencies unavailable", 503)
 			return
 		}
@@ -80,12 +81,30 @@ func Run(ctx context.Context, c Config) error {
 	run, stop := context.WithCancel(ctx)
 	defer stop()
 	var workers sync.WaitGroup
-	errorsCh := make(chan error, 3)
+	errorsCh := make(chan error, 4)
+	hints := delivery.NewHints()
+	poller := &bot.Poller{Telegram: tg, Backend: backend, BotID: c.BotID, Updates: updates, Ready: ready(&polling), Hints: hints}
+	var webhookServer *http.Server
+	if c.WebhookURL != "" {
+		if err := poller.Verify(run); err != nil {
+			return err
+		}
+		hook := bot.NewWebhook(run, poller, c.WebhookSecret)
+		// Use exact path matching rather than ServeMux patterns for configured URLs.
+		webhookServer = &http.Server{Addr: c.WebhookListen, Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.URL.Path != c.WebhookPath {
+				http.NotFound(w, r)
+				return
+			}
+			hook.ServeHTTP(w, r)
+		}), ReadHeaderTimeout: 3 * time.Second, ReadTimeout: 5 * time.Second, WriteTimeout: 30 * time.Second, IdleTimeout: 30 * time.Second, MaxHeaderBytes: 16 << 10, BaseContext: func(net.Listener) context.Context { return run }}
+		workers.Go(hook.Run)
+		workers.Go(func() { errorsCh <- webhookServer.ListenAndServe() })
+	} else {
+		workers.Go(func() { errorsCh <- poller.Run(run) })
+	}
 	workers.Go(func() {
-		errorsCh <- (&bot.Poller{Telegram: tg, Backend: backend, BotID: c.BotID, Updates: updates, Ready: ready(&polling)}).Run(run)
-	})
-	workers.Go(func() {
-		errorsCh <- (&delivery.Sender{Backend: backend, Telegram: tg, Limiter: limiter, Brokers: c.Brokers, Prefix: c.Prefix, Group: c.Group, Worker: worker, Outcomes: outcomes, Ready: ready(&sending)}).Run(run)
+		errorsCh <- (&delivery.Sender{Backend: backend, Telegram: tg, Limiter: limiter, Brokers: c.Brokers, Prefix: c.Prefix, Group: c.Group, Worker: worker, Outcomes: outcomes, Ready: ready(&sending), Hints: hints}).Run(run)
 	})
 	go func() { errorsCh <- server.ListenAndServe() }()
 	select {
@@ -96,6 +115,14 @@ func Run(ctx context.Context, c Config) error {
 	shutdown, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	_ = server.Shutdown(shutdown)
+	if webhookServer != nil {
+		if webhookServer.Shutdown(shutdown) != nil {
+			_ = webhookServer.Close()
+		}
+	}
 	workers.Wait()
+	if errors.Is(err, http.ErrServerClosed) {
+		return nil
+	}
 	return err
 }

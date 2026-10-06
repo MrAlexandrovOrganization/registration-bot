@@ -15,6 +15,9 @@ services:
       BACKEND_ADDR: registration-backend:50052
       ALLOW_INSECURE_GRPC: 'true'
       HTTP_LISTEN: ':9093'
+      WEBHOOK_URL: ${WEBHOOK_URL:-}
+      TELEGRAM_WEBHOOK_SECRET: ${TELEGRAM_WEBHOOK_SECRET:-}
+      WEBHOOK_LISTEN_ADDR: ':8080'
       KAFKA_BROKERS: kafka:9092
       KAFKA_TOPIC_PREFIX: registration.telegram
       KAFKA_GROUP: registration-telegram
@@ -23,9 +26,10 @@ services:
       OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4317
       OTEL_EXPORTER_OTLP_INSECURE: 'true'
     networks: [api, kafka, jaeger, prometheus, telegram]
-    ports: ['127.0.0.1:9093:9093']
+    ports: ['127.0.0.1:9093:9093', '127.0.0.1:9083:8080']
     healthcheck:
-      test: [CMD, wget, -q, -O, /dev/null, 'http://127.0.0.1:9093/livez']
+      test: [CMD, wget, -q, -O, /dev/null, 'http://127.0.0.1:9093/readyz']
+      start_period: 100s # Previous sender lease may remain valid for 90 seconds.
       interval: 15s
       timeout: 3s
       retries: 3

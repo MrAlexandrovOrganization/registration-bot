@@ -8,8 +8,6 @@ import (
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
-	"go.opentelemetry.io/otel"
-	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	pb "registration.local/frontend/api"
 	"registration.local/frontend/internal/delivery"
@@ -22,6 +20,7 @@ type Poller struct {
 	BotID    int64
 	Updates  *prometheus.CounterVec
 	Ready    func(bool)
+	Hints    interface{ Offer([]int64) }
 }
 
 func Convert(u telegram.Update) *pb.Update {
@@ -72,13 +71,19 @@ func Convert(u telegram.Update) *pb.Update {
 	}
 	return result
 }
-func (p *Poller) Run(ctx context.Context) error {
+func (p *Poller) Verify(ctx context.Context) error {
 	var me telegram.User
 	if err := p.Telegram.Call(ctx, "getMe", struct{}{}, &me); err != nil {
 		return errors.New("cannot identify Telegram bot")
 	}
 	if me.ID != p.BotID {
 		return errors.New("Telegram bot identity does not match token prefix")
+	}
+	return nil
+}
+func (p *Poller) Run(ctx context.Context) error {
+	if err := p.Verify(ctx); err != nil {
+		return err
 	}
 	var offset int64
 	for ctx.Err() == nil {
@@ -104,36 +109,15 @@ func (p *Poller) Run(ctx context.Context) error {
 		}
 		p.Ready(true)
 		for _, raw := range updates {
-			update := Convert(raw)
-			if update != nil {
-				work, span := otel.Tracer("registration-telegram").Start(ctx, "telegram.update")
-				for ctx.Err() == nil {
-					call, cancel := context.WithTimeout(work, 15*time.Second)
-					_, err = p.Backend.Accept(call, update)
-					cancel()
-					if err == nil {
-						p.Updates.WithLabelValues("accepted").Inc()
-						break
-					}
-					if status.Code(err) == codes.InvalidArgument {
-						p.Updates.WithLabelValues("invalid").Inc()
-						break
-					}
-					p.Ready(false)
-					slog.WarnContext(work, "update persistence deferred", "code", status.Code(err).String())
-					if delivery.Sleep(ctx, time.Second) != nil {
-						span.End()
-						return nil
-					}
+			for ctx.Err() == nil {
+				err = p.Accept(ctx, raw)
+				if err == nil {
+					break
 				}
-				span.End()
-				if raw.Callback != nil {
-					// This only dismisses Telegram's spinner after persistence; all content messages use the sender.
-					call, cancel := context.WithTimeout(ctx, 3*time.Second)
-					_ = p.Telegram.Call(call, "answerCallbackQuery", struct {
-						ID string `json:"callback_query_id"`
-					}{raw.Callback.ID}, nil)
-					cancel()
+				p.Ready(false)
+				slog.WarnContext(ctx, "update persistence deferred", "code", status.Code(err).String())
+				if delivery.Sleep(ctx, time.Second) != nil {
+					return nil
 				}
 			}
 			if ctx.Err() != nil {

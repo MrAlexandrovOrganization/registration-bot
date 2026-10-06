@@ -27,102 +27,66 @@ type Sender struct {
 	Prefix, Group, Worker string
 	Outcomes              *prometheus.CounterVec
 	Ready                 func(bool)
+	Hints                 *Hints
+	reader                broadcastReader
 }
 type fetched struct {
 	message kafka.Message
-	reader  *kafka.Reader
-	ack     chan struct{}
+	ack     chan error
 	bulk    bool
 }
 
 func (s *Sender) Run(ctx context.Context) error {
-	worker := s.Worker
-	interactive := make(chan fetched)
+	if s.Hints == nil {
+		s.Hints = NewHints()
+	}
 	bulk := make(chan fetched)
 	run, cancel := context.WithCancel(ctx)
 	defer cancel()
 	var workers sync.WaitGroup
-	for _, q := range []struct {
-		kind string
-		out  chan fetched
-		bulk bool
-	}{{"interactive", interactive, false}, {"broadcast", bulk, true}} {
-		workers.Go(func() {
-			reader := kafka.NewReader(kafka.ReaderConfig{Brokers: s.Brokers, Topic: s.Prefix + "." + q.kind + ".v1", GroupID: s.Group + "-" + q.kind, MinBytes: 1, MaxBytes: 1 << 20, MaxWait: time.Second, CommitInterval: 0, StartOffset: kafka.FirstOffset, QueueCapacity: 1})
-			defer reader.Close()
-			for run.Err() == nil {
-				message, err := reader.FetchMessage(run)
-				if err != nil {
-					if run.Err() == nil {
-						slog.Warn("Kafka fetch deferred")
-						_ = Sleep(run, time.Second)
-					}
-					continue
-				}
-				f := fetched{message, reader, make(chan struct{}), q.bulk}
-				select {
-				case q.out <- f:
-				case <-run.Done():
-					return
-				}
-				select {
-				case <-f.ack:
-				case <-run.Done():
-					return
-				}
-			}
-		})
-	}
+	workers.Go(func() { s.recoverInteractive(run) })
+	workers.Go(func() {
+		if s.reader != nil {
+			s.consumeBroadcast(run, s.reader, bulk)
+			return
+		}
+		reader := kafka.NewReader(kafka.ReaderConfig{Brokers: s.Brokers, Topic: s.Prefix + ".broadcast.v1", GroupID: s.Group + "-broadcast", MinBytes: 1, MaxBytes: 1 << 20, MaxWait: time.Second, CommitInterval: 0, StartOffset: kafka.FirstOffset, QueueCapacity: 1})
+		defer reader.Close()
+		s.consumeBroadcast(run, reader, bulk)
+	})
 	defer workers.Wait() // cancel before waiting when leaving the function.
 	defer cancel()
 	heartbeat := time.NewTicker(15 * time.Second)
 	defer heartbeat.Stop()
 	for ctx.Err() == nil {
-		var f fetched
 		select {
-		case f = <-interactive:
-		default:
-			select {
-			case <-ctx.Done():
-				return nil
-			case <-heartbeat.C:
-				call, cancel := context.WithTimeout(ctx, 5*time.Second)
-				_, err := s.Backend.Claim(call, &pb.ClaimRequest{Worker: worker})
-				cancel()
-				s.Ready(err == nil)
-				continue
-			case f = <-interactive:
-			case f = <-bulk:
-			}
-		}
-		for ctx.Err() == nil {
-			err := s.handle(ctx, worker, f)
-			if err == nil {
-				break
-			}
-			s.Ready(false)
-			slog.Warn("delivery deferred", "code", status.Code(err).String())
-			if Sleep(ctx, time.Second) != nil {
-				return nil
-			}
-		}
-		if ctx.Err() != nil {
+		case <-ctx.Done():
 			return nil
-		}
-		for ctx.Err() == nil {
+		case <-heartbeat.C:
 			call, cancel := context.WithTimeout(ctx, 5*time.Second)
-			err := f.reader.CommitMessages(call, f.message)
+			_, err := s.Backend.Claim(call, &pb.ClaimRequest{Worker: s.Worker})
 			cancel()
-			if err == nil {
-				break
+			s.Ready(err == nil)
+		case id := <-s.Hints.queue:
+			s.handleHint(ctx, id)
+		case id := <-s.Hints.recovery:
+			s.handleHint(ctx, id)
+		case f := <-bulk:
+			err := s.handle(ctx, s.Worker, f)
+			if err != nil {
+				s.Ready(false)
 			}
-			if Sleep(ctx, time.Second) != nil {
-				return nil
-			}
+			f.ack <- err // buffered: Kafka commits/retries cannot stall this worker
 		}
-		close(f.ack)
 	}
 	return nil
+}
+func (s *Sender) handleHint(ctx context.Context, id int64) {
+	err := s.handleID(ctx, s.Worker, id, false)
+	s.Hints.done(id)
+	if err != nil {
+		s.Ready(false)
+	} // durable discovery retries later
 }
 func (s *Sender) handle(ctx context.Context, worker string, f fetched) error {
 	id, err := strconv.ParseInt(string(f.message.Value), 10, 64)
@@ -130,6 +94,9 @@ func (s *Sender) handle(ctx context.Context, worker string, f fetched) error {
 		slog.Warn("invalid Kafka message discarded")
 		return nil
 	}
+	return s.handleID(ctx, worker, id, f.bulk)
+}
+func (s *Sender) handleID(ctx context.Context, worker string, id int64, bulk bool) error {
 	call, cancel := context.WithTimeout(ctx, 5*time.Second)
 	d, err := s.Backend.Claim(call, &pb.ClaimRequest{Id: id, Worker: worker})
 	cancel()
@@ -150,12 +117,22 @@ func (s *Sender) handle(ctx context.Context, worker string, f fetched) error {
 	work, span := otel.Tracer("registration-sender").Start(work, "telegram.delivery")
 	defer span.End()
 	completion := &pb.Completion{Id: d.Id, Lease: d.Lease}
-	if err = s.Limiter.Wait(work, d.Chat, d.Group, f.bulk); err == nil {
+	if err = s.Limiter.Wait(work, d.Chat, d.Group, bulk); err == nil {
 		var message int64
 		switch d.Kind {
 		case "view":
 			text, markup := resources.Render(d.View)
-			message, err = s.Telegram.Send(work, d.Chat, text, markup)
+			if d.EditMessageId > 0 {
+				message, err = s.Telegram.Edit(work, d.Chat, d.EditMessageId, text, markup)
+				var api *telegram.APIError
+				if errors.As(err, &api) && api.Uneditable && !api.Uncertain {
+					if err = s.Limiter.Wait(work, d.Chat, d.Group, bulk); err == nil {
+						message, err = s.Telegram.Send(work, d.Chat, text, markup)
+					}
+				}
+			} else {
+				message, err = s.Telegram.Send(work, d.Chat, text, markup)
+			}
 		case "copy":
 			message, err = s.Telegram.Copy(work, d.Chat, d.SourceChat, d.SourceMessage)
 		case "export":

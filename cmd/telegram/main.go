@@ -31,7 +31,7 @@ func run() int {
 		slog.Error("invalid configuration", "reason", err.Error())
 		return 1
 	}
-	if err = app.Run(ctx, c); err != nil {
+	if err = app.Execute(ctx, c, os.Args[1:]); err != nil {
 		slog.Error("frontend stopped", "reason", err.Error())
 		return 1
 	}

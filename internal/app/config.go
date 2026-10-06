@@ -15,6 +15,7 @@ type Config struct {
 	TotalRate, BulkRate                                   int
 	Insecure                                              bool
 	TelegramLocalAPI                                      string
+	WebhookURL, WebhookSecret, WebhookListen, WebhookPath string
 }
 
 func env(key, fallback string) string {
@@ -52,6 +53,22 @@ func Load() (Config, error) {
 	c.TelegramLocalAPI, err = telegramOrigin(os.Getenv("TELEGRAM_LOCAL_API_URL"))
 	if err != nil {
 		return c, err
+	}
+	c.WebhookURL = os.Getenv("WEBHOOK_URL")
+	c.WebhookSecret = os.Getenv("TELEGRAM_WEBHOOK_SECRET")
+	c.WebhookListen = env("WEBHOOK_LISTEN_ADDR", ":8080")
+	if c.WebhookURL != "" {
+		u, err := url.Parse(c.WebhookURL)
+		if err != nil || u.Scheme != "https" || u.Hostname() == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" || u.Opaque != "" {
+			return c, errors.New("WEBHOOK_URL must be an HTTPS URL without credentials, query or fragment")
+		}
+		c.WebhookPath = u.Path
+		if c.WebhookPath == "" {
+			c.WebhookPath = "/"
+		}
+		if len(c.WebhookSecret) < 1 || len(c.WebhookSecret) > 256 || strings.Trim(c.WebhookSecret, "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-") != "" {
+			return c, errors.New("TELEGRAM_WEBHOOK_SECRET must contain 1..256 URL-safe characters")
+		}
 	}
 	return c, nil
 }

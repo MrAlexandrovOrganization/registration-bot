@@ -22,9 +22,11 @@ type Client struct {
 	HTTP *http.Client
 }
 type APIError struct {
-	Code       int
-	RetryAfter int64
-	Uncertain  bool
+	Code        int
+	RetryAfter  int64
+	Uncertain   bool
+	NotModified bool
+	Uneditable  bool
 }
 
 func (e *APIError) Error() string { return fmt.Sprintf("telegram request failed (code=%d)", e.Code) }
@@ -52,10 +54,11 @@ func (c *Client) request(ctx context.Context, method, contentType string, body i
 		return &APIError{Code: response.StatusCode, Uncertain: true}
 	}
 	var envelope struct {
-		OK         bool            `json:"ok"`
-		Result     json.RawMessage `json:"result"`
-		Code       int             `json:"error_code"`
-		Parameters struct {
+		OK          bool            `json:"ok"`
+		Result      json.RawMessage `json:"result"`
+		Code        int             `json:"error_code"`
+		Description string          `json:"description"`
+		Parameters  struct {
 			RetryAfter int64 `json:"retry_after"`
 		} `json:"parameters"`
 	}
@@ -63,7 +66,14 @@ func (c *Client) request(ctx context.Context, method, contentType string, body i
 		return &APIError{Code: response.StatusCode, Uncertain: true}
 	}
 	if !envelope.OK {
-		return &APIError{Code: envelope.Code, RetryAfter: envelope.Parameters.RetryAfter}
+		e := &APIError{Code: envelope.Code, RetryAfter: envelope.Parameters.RetryAfter}
+		// Keep only allowlisted classifications, never retain Telegram descriptions.
+		if method == "editMessageText" && envelope.Code == 400 && response.StatusCode == 400 {
+			description := strings.ToLower(envelope.Description)
+			e.NotModified = description == "bad request: message is not modified" || strings.HasPrefix(description, "bad request: message is not modified:")
+			e.Uneditable = description == "bad request: message to edit not found" || description == "bad request: message can't be edited"
+		}
+		return e
 	}
 	if result != nil && json.Unmarshal(envelope.Result, result) != nil {
 		return &APIError{Uncertain: true}
@@ -90,15 +100,38 @@ type Chat struct {
 	Title string `json:"title"`
 }
 type Message struct {
-	ID      int64  `json:"message_id"`
-	From    User   `json:"from"`
-	Chat    Chat   `json:"chat"`
-	Text    string `json:"text"`
-	Contact *struct {
+	ID       int64  `json:"message_id"`
+	Date     int64  `json:"date"`
+	Caption  string `json:"caption"`
+	HasMedia bool   `json:"-"`
+	From     User   `json:"from"`
+	Chat     Chat   `json:"chat"`
+	Text     string `json:"text"`
+	Contact  *struct {
 		Phone string `json:"phone_number"`
 		Owner int64  `json:"user_id"`
 	} `json:"contact"`
 }
+
+func (m *Message) UnmarshalJSON(data []byte) error {
+	type plain Message
+	var decoded plain
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		return err
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return err
+	}
+	for _, key := range []string{"photo", "animation", "audio", "document", "paid_media", "sticker", "story", "video", "video_note", "voice", "caption"} {
+		if _, ok := fields[key]; ok {
+			decoded.HasMedia = true
+		}
+	}
+	*m = Message(decoded)
+	return nil
+}
+
 type Membership struct {
 	Chat Chat `json:"chat"`
 	From User `json:"from"`
@@ -112,10 +145,11 @@ type Update struct {
 	ID       int64    `json:"update_id"`
 	Message  *Message `json:"message"`
 	Callback *struct {
-		ID      string   `json:"id"`
-		From    User     `json:"from"`
-		Data    string   `json:"data"`
-		Message *Message `json:"message"`
+		ID              string   `json:"id"`
+		From            User     `json:"from"`
+		Data            string   `json:"data"`
+		Message         *Message `json:"message"`
+		InlineMessageID string   `json:"inline_message_id"`
 	} `json:"callback_query"`
 	Membership    *Membership `json:"chat_member"`
 	BotMembership *Membership `json:"my_chat_member"`
@@ -131,6 +165,34 @@ func (c *Client) Send(ctx context.Context, chat int64, text tgfmt.HTML, markup r
 	}{chat, string(text), "HTML", markup}, &result)
 	return result.ID, err
 }
+func (c *Client) Edit(ctx context.Context, chat, message int64, text tgfmt.HTML, markup resources.Markup) (int64, error) {
+	// editMessageText accepts only inline markup, including an empty keyboard
+	// to remove stale buttons. Reply-keyboard removal is a send-only operation.
+	buttons := markup.InlineKeyboard
+	if buttons == nil {
+		buttons = [][]resources.Button{}
+	}
+	err := c.Call(ctx, "editMessageText", struct {
+		Chat    int64  `json:"chat_id"`
+		Message int64  `json:"message_id"`
+		Text    string `json:"text"`
+		Parse   string `json:"parse_mode"`
+		Markup  struct {
+			Buttons [][]resources.Button `json:"inline_keyboard"`
+		} `json:"reply_markup"`
+	}{chat, message, string(text), "HTML", struct {
+		Buttons [][]resources.Button `json:"inline_keyboard"`
+	}{buttons}}, nil)
+	var api *APIError
+	if errors.As(err, &api) && api.NotModified {
+		err = nil
+	}
+	if err != nil {
+		return 0, err
+	}
+	return message, nil
+}
+
 func (c *Client) Copy(ctx context.Context, chat, source, message int64) (int64, error) {
 	var result Message
 	err := c.Call(ctx, "copyMessage", struct {

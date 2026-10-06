@@ -38,11 +38,12 @@ test-race: proto-gen
 build: proto-gen
 	go build -trimpath -o .bin/telegram ./cmd/telegram
 config-check:
-	$(DOCKER_COMPOSE) --env-file config/test.env config --quiet
+	env -u BOT_TOKEN -u BACKEND_TOKEN -u TELEGRAM_WEBHOOK_SECRET WEBHOOK_URL= $(DOCKER_COMPOSE) --env-file config/test.env config --quiet
+	env -u BOT_TOKEN -u BACKEND_TOKEN -u TELEGRAM_WEBHOOK_SECRET WEBHOOK_URL=https://example.invalid/telegram $(DOCKER_COMPOSE) --env-file config/test.env config --quiet
 compose-build:
 	$(DOCKER_COMPOSE) build
 up:
-	$(DOCKER_COMPOSE) up -d --build
+	$(DOCKER_COMPOSE) up -d --build --wait --wait-timeout 180
 down:
 	$(DOCKER_COMPOSE) down
 logs:
@@ -55,3 +56,9 @@ secrets-check:
 .PHONY: versions
 versions:
 	@$(foreach v,$(VERSION_VARS),printf '%s=%s\n' '$(v)' '$($(v))';)
+
+.PHONY: register-webhook delete-webhook
+register-webhook:
+	$(DOCKER_COMPOSE) run --rm --no-deps telegram register-webhook
+delete-webhook:
+	$(DOCKER_COMPOSE) run --rm --no-deps telegram delete-webhook

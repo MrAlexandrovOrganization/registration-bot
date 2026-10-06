@@ -6,9 +6,20 @@ Generated *.pb.go are ignored. Make generates before Go checks/build/run; Docker
 Never connect to PostgreSQL/SQLite here. Domain decisions and permissions belong to backend.
 Use internal/resources for user-visible text, tgfmt.Escape for every dynamic value.
 All content sends go through the common sender/limiter, never directly from polling handlers.
+Webhook and polling share durable Accept; replay receipt IDs even on duplicates.
+PendingInteractive is bounded recovery; Kafka is broadcast-only and must not block direct work.
+Webhook registration/deletion are explicit CLI commands, never startup/shutdown.
+Only attest accessible bot-owned text callbacks; edit fallback is restricted to definite uneditable errors.
+Participant help/refusals are neutral; roles and permissions are backend decisions.
 Do not log Telegram errors with raw URLs, tokens, updates or response bodies.
 
 make install, format, check, test-race, build, compose-build. Tests use synthetic
 data and fake Telegram HTTP; they never register webhooks or send live messages.
 make run/up use real configuration and immediately start the frontend.
 One frontend instance per bot. Do not start it against a live token during tests.
+
+Read docs/OPERATIONS.md before delivery. CI checks/builds PR/push main; SSH CD
+requires repository DEPLOY_ENABLED=true after provisioning/coordinated migration 004.
+SSH workflow fast-forwards main to the checked SHA, then runs the same make up as locally.
+make up builds and waits for healthchecks (180s); up, register-webhook and delete-webhook are live operations, never tests.
+No automatic webhook registration/deletion, topic creation, imports or migrations in CD.

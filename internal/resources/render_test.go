@@ -35,6 +35,26 @@ func TestRegistrationOnlyViews(t *testing.T) {
 	}
 }
 
+func TestPublicHelpAndContentErrorsDoNotExposeOperatorCommands(t *testing.T) {
+	for _, view := range []*pb.View{{Kind: "help_public"}, {Kind: "notice", Code: "invalid_content"}} {
+		text, _ := Render(view)
+		for _, forbidden := range []string{"прав", "рол", "admin", "staff", "counselor", "аудитори", "/my_permissions", "/stats", "/sources", "/export", "/broadcast", "/grant_permission"} {
+			if strings.Contains(strings.ToLower(string(text)), forbidden) {
+				t.Fatalf("public view exposes %q", forbidden)
+			}
+		}
+		if !strings.Contains(string(text), "/help") || !strings.Contains(string(text), "/start") {
+			t.Fatal("missing public navigation")
+		}
+	}
+	text, _ := Render(&pb.View{Kind: "help_public"})
+	for _, command := range []string{"/start", "/cancel", "/about", "/bring", "/help"} {
+		if !strings.Contains(string(text), command) {
+			t.Fatal(command)
+		}
+	}
+}
+
 func TestSourceStats(t *testing.T) {
 	text, _ := Render(&pb.View{Kind: "sources", Numbers: []int64{1, 2}, Fields: []*pb.Field{
 		{Key: "", Value: "3"}, {Key: ":unknown", Value: "4"}, {Key: "<b>A&B</b>", Value: "5"},
