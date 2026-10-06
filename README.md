@@ -14,7 +14,7 @@ Go-frontend для регистрации: webhook или long polling, пред
 
 ## Подготовка
 
-Prerequisites: Go **1.26.1**, protoc **34.0**, Python 3 с venv, Make, Docker Compose v2.
+Prerequisites: Go (версия из `go.mod`), Python 3 с venv, Make, Docker Compose v2.
 
 ```sh
 make install
@@ -25,10 +25,10 @@ make test-race
 make build
 ```
 
-Инструменты закреплены: protoc-gen-go, protoc-gen-go-grpc и
+Инструменты закреплены: Buf, protoc-gen-go, protoc-gen-go-grpc и
 goimports в `.bin` (версии: `make versions`), pre-commit и Ruff в `.tools`,
 Python-зависимости закреплены в requirements-tools.txt. `format` применяет
-goimports, go fix и Ruff. `check` — формат, генерация, vet, fake-тесты и Compose
+goimports, go fix и Ruff. `check` — формат, проверка схемы, генерация, vet, fake-тесты и Compose
 на синтетических значениях, Gitleaks из `versions.mk` с redaction для версионируемых файлов;
 ни одного реального Telegram-запроса. Docker нужен для Compose и secret scan.
 Generated `*.pb.go` игнорируются Git, как в notes-bot. `make build`, `test`,
@@ -37,9 +37,34 @@ Generated `*.pb.go` игнорируются Git, как в notes-bot. `make bui
 Docker исключает локальный generated-код и сам генерирует его в build-stage
 закреплёнными инструментами. Проверка генерации/компиляции заменяет сравнение
 с закоммиченными файлами. Frontend по-прежнему собирается независимо.
-Canonical source — backend `api/registration.proto`; местный файл является
-snapshot контракта v1, меняется только согласованно с backend. `go_package`
-переопределяется генератором, не ручной правкой generated-файлов.
+
+### Protobuf / Buf
+
+```sh
+make install-proto  # только Buf и два Go-плагина в .bin
+make proto-check    # buf build: проверка компиляции схемы, также входит в check
+make proto-gen      # buf generate: генерация api/*.pb.go
+```
+
+Buf использует конфигурацию v2 (`buf.yaml`, `buf.gen.yaml`) и локальные плагины.
+Отдельный protoc не нужен. Buf и protoc-gen-go-grpc закреплены в `versions.mk`,
+protoc-gen-go берётся из версии protobuf в `go.mod`; `make versions` показывает
+значения. После обновления версий выполните `make install-proto`.
+Локальная сборка, CI и Docker используют одни Make-цели и версии.
+Генерация не использует BSR, remote plugins или соседний checkout;
+доступ к Go-модулям нужен при установке инструментов и зависимостей.
+
+Канонический источник — `backends/registration/api/registration.proto` в backend.
+Местный `api/registration.proto` — версионируемый побайтовый snapshot контракта v1.
+Обновляйте его явно вручную из согласованной ревизии backend, после проверки
+совместимости обоих сервисов; затем запускайте `make proto-check`, `make build`
+и `make test-race`. Сборка сама snapshot не синхронизирует.
+Не меняйте `go_package` в snapshot: `buf.gen.yaml` задаёт
+`Mapi/registration.proto=registration.local/frontend/api` для **обоих** плагинов
+и `paths=source_relative`. Generated-файлы не редактируются и не коммитятся.
+`proto-check` проверяет компиляцию схемы, а не breaking changes или равенство
+snapshot backend. Даже отдельная проверка breaking changes не доказывает
+совместимость семантики RPC и порядка доставки — это требует согласования и тестов.
 
 CI на PR и push main вызывает `make install`, `make check`, `make test-race`,
 `make build`; отдельный job выполняет `make compose-build`. SSH CD зависит от обоих

@@ -2,6 +2,18 @@
 
 Read README. Independent Go 1.26.1 module; no sibling checkout required.
 Backend owns canonical protobuf; this repo includes a versioned .proto snapshot.
+Update api/registration.proto explicitly and manually from an agreed backend revision;
+keep it byte-identical to backends/registration/api/registration.proto, including go_package.
+Builds never sync the snapshot or require sibling checkouts, BSR or remote plugins.
+make install-proto installs Buf and local Go plugins into .bin; make proto-gen uses
+Buf v2 inputs from buf.gen.yaml. Preserve paths=source_relative and
+Mapi/registration.proto=registration.local/frontend/api for BOTH plugins.
+Buf and gRPC plugin versions belong in versions.mk; the Go protobuf plugin version
+comes from go.mod. Use make versions and reinstall after version changes.
+make proto-check runs buf build and is part of make check; it checks schema compilation,
+not snapshot equality or breaking changes. Breaking checks alone cannot verify RPC
+semantics/delivery compatibility. After a coordinated snapshot update, run proto-check,
+build and test-race. Never edit generated code.
 Generated *.pb.go are ignored. Make generates before Go checks/build/run; Docker generates independently.
 Never connect to PostgreSQL/SQLite here. Domain decisions and permissions belong to backend.
 Use internal/resources for user-visible text, tgfmt.Escape for every dynamic value.

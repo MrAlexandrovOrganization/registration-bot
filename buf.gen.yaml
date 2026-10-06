@@ -1,0 +1,16 @@
+version: v2
+inputs:
+  - directory: .
+    paths:
+      - api/registration.proto
+plugins:
+  - local: protoc-gen-go
+    out: .
+    opt:
+      - paths=source_relative
+      - Mapi/registration.proto=registration.local/frontend/api
+  - local: protoc-gen-go-grpc
+    out: .
+    opt:
+      - paths=source_relative
+      - Mapi/registration.proto=registration.local/frontend/api
