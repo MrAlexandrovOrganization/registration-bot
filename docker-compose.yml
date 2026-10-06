@@ -1,6 +1,7 @@
 name: registration-telegram
 services:
   telegram:
+    container_name: registration-telegram
     build:
       context: .
       args:
