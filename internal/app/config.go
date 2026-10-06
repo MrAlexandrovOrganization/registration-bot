@@ -66,7 +66,8 @@ func Load() (Config, error) {
 		if c.WebhookPath == "" {
 			c.WebhookPath = "/"
 		}
-		if len(c.WebhookSecret) < 1 || len(c.WebhookSecret) > 256 || strings.Trim(c.WebhookSecret, "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-") != "" {
+		const webhookAllowedCharacters = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-"
+		if len(c.WebhookSecret) < 1 || len(c.WebhookSecret) > 256 || strings.Trim(c.WebhookSecret, webhookAllowedCharacters) != "" {
 			return c, errors.New("TELEGRAM_WEBHOOK_SECRET must contain 1..256 URL-safe characters")
 		}
 	}
