@@ -42,7 +42,8 @@ divergent checkout или локальным правкам отказывает
 предыдущего sender lease до 90 секунд. CI не публикует образ.
 GitHub сериализует deploy jobs; `$HOME/.registration-deploy.lock` под общим VM_USER
 сериализует оба репозитория, но не устанавливает порядок совместимых версий.
-CD не регистрирует webhook, не создаёт топики, не запускает импорт/миграции.
+Frontend CD не регистрирует webhook, не создаёт топики, не запускает импорт/миграции.
+Миграции применяет backend `make up` до запуска backend; frontend обновляется после него.
 
 ## Первый запуск и migration 004
 
@@ -53,8 +54,9 @@ CD не регистрирует webhook, не создаёт топики, не
 
 Остановить старый frontend/Python poller, затем backend; сделать backup PostgreSQL,
 выбрать пару SHA с зелёным CI и одинаковым proto. Обновить и собрать оба checkout.
-Явно применить backend `make database-up` и `make migrate-compose` (до migration 004),
-затем backend `make up`, затем новый frontend `make up`.
+Сначала выполнить backend `make up`: он собирает образ, останавливает backend,
+выполняет `database-up`, затем `migrate-compose` (включая migration 004) и запускает backend.
+После успешного завершения выполнить новый frontend `make up`; frontend миграции не запускает.
 Нельзя включать новый backend со старым frontend: Kafka теперь broadcast-only,
 интерактивная доставка требует Accept delivery IDs и PendingInteractive recovery.
 Не сбрасывать старые jobs/leases. До 90 секунд может занимать освобождение sender lease.

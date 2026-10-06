@@ -34,4 +34,5 @@ Read docs/OPERATIONS.md before delivery. CI checks/builds PR/push main; SSH CD
 requires repository DEPLOY_ENABLED=true after provisioning/coordinated migration 004.
 SSH workflow fast-forwards main to the checked SHA, then runs the same make up as locally.
 make up builds and waits for healthchecks (180s); up, register-webhook and delete-webhook are live operations, never tests.
-No automatic webhook registration/deletion, topic creation, imports or migrations in CD.
+No automatic webhook registration/deletion, topic creation, imports or migrations in frontend CD.
+Run backend make up first (it applies migrations), then frontend make up; see docs/OPERATIONS.md.
