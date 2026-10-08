@@ -36,7 +36,7 @@ func Init(ctx context.Context) (func(context.Context) error, error) {
 	slog.SetDefault(slog.New(handler{base}).With("service", "registration-telegram"))
 	otel.SetTextMapPropagator(propagation.TraceContext{})
 	otel.SetErrorHandler(otel.ErrorHandlerFunc(func(error) { slog.Warn("telemetry export failed") }))
-	opts := []sdktrace.TracerProviderOption{sdktrace.WithResource(resource.NewSchemaless(attribute.String("service.name", "registration-telegram"))), sdktrace.WithSampler(sdktrace.ParentBased(sdktrace.TraceIDRatioBased(0.1)))}
+	opts := []sdktrace.TracerProviderOption{sdktrace.WithResource(resource.NewSchemaless(attribute.String("service.name", "registration-telegram"))), sdktrace.WithSampler(sdktrace.ParentBased(sdktrace.AlwaysSample()))}
 	if os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT") != "" {
 		exporter, err := otlptracegrpc.New(ctx)
 		if err != nil {
