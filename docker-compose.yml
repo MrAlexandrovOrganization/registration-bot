@@ -12,7 +12,7 @@ services:
     environment:
       BOT_TOKEN: ${BOT_TOKEN:?required}
       BACKEND_TOKEN: ${BACKEND_TOKEN:?required}
-      TELEGRAM_LOCAL_API_URL: http://telegram-bot-api:8081
+      TELEGRAM_LOCAL_API_URL: ${TELEGRAM_LOCAL_API_URL-http://telegram-bot-api:8081}
       BACKEND_ADDR: registration-backend:50052
       ALLOW_INSECURE_GRPC: 'true'
       HTTP_LISTEN: ':9093'
