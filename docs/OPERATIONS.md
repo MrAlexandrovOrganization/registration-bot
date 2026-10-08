@@ -40,6 +40,18 @@ divergent checkout или локальным правкам отказывает
 локально: пересобирает образ и ждёт Compose healthcheck до 180 секунд
 (`--wait --wait-timeout 180`). Проверяется `/readyz`; предусмотрено ожидание
 предыдущего sender lease до 90 секунд. CI не публикует образ.
+Frontend ожидает стартовый Claim внутри процесса до 120 секунд, повторяя его
+через 2 секунды при ResourceExhausted (занят sender lease), Unavailable или
+DeadlineExceeded. В ожидании HTTP listener ещё не запущен и readiness не проходит.
+При успешном Claim запуск продолжается; прочие gRPC-коды завершают его сразу.
+Если ожидание исчерпано, проверить доступность backend и наличие второй копии
+frontend. Неизменный токен не позволяет унаследовать lease: worker уникален для
+каждого процесса. При штатной остановке ReleaseSender освобождает его после
+завершения sender/heartbeat и отчётов Complete, с отдельным таймаутом 5 секунд.
+При SIGKILL, ошибке RPC или старом backend без ReleaseSender остаётся TTL.
+Сначала обновить backend с новым RPC, затем frontend; миграция БД не нужна.
+Первая замена старого frontend ещё может ждать до 90 секунд. Последующие штатные
+остановки подтверждаются логом `sender lease cleanup completed` с `released=true`.
 GitHub сериализует deploy jobs; `$HOME/.registration-deploy.lock` под общим VM_USER
 сериализует оба репозитория, но не устанавливает порядок совместимых версий.
 Frontend CD не регистрирует webhook, не создаёт топики, не запускает импорт/миграции.

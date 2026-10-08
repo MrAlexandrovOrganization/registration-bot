@@ -44,11 +44,16 @@ func Run(ctx context.Context, c Config) error {
 	defer conn.Close()
 	backend := pb.NewRegistrationClient(conn)
 	worker := rand.Text()
-	call, cancel := context.WithTimeout(ctx, 10*time.Second)
-	_, err = backend.Claim(call, &pb.ClaimRequest{Worker: worker})
-	cancel()
-	if err != nil {
-		return errors.New("backend unavailable or another sender is active")
+	run, stop := context.WithCancel(ctx)
+	var workers sync.WaitGroup
+	// Also release after a lost startup Claim response or an early startup failure.
+	// Registered after conn.Close so the connection remains usable for cleanup.
+	defer stopAndReleaseSender(ctx, stop, &workers, backend, worker)
+	if err := waitForSender(ctx, backend, worker); err != nil {
+		if ctx.Err() != nil {
+			return nil
+		}
+		return err
 	}
 	registry := prometheus.NewRegistry()
 	registry.MustRegister(prometheus.NewGoCollector(), prometheus.NewProcessCollector(prometheus.ProcessCollectorOpts{}))
@@ -56,6 +61,7 @@ func Run(ctx context.Context, c Config) error {
 	outcomes := prometheus.NewCounterVec(prometheus.CounterOpts{Name: "registration_telegram_delivery_total", Help: "Delivery attempt results"}, []string{"outcome"})
 	registry.MustRegister(updates, outcomes)
 	var polling, sending atomic.Int64
+	sending.Store(time.Now().Unix()) // Startup Claim has already verified ownership.
 	ready := func(a *atomic.Int64) func(bool) {
 		return func(ok bool) {
 			if ok {
@@ -78,9 +84,6 @@ func Run(ctx context.Context, c Config) error {
 	server := &http.Server{Addr: c.HTTP, Handler: mux, ReadHeaderTimeout: 3 * time.Second, ReadTimeout: 5 * time.Second, WriteTimeout: 10 * time.Second, IdleTimeout: 30 * time.Second}
 	tg := telegram.New(c.Token, c.TelegramLocalAPI)
 	limiter := delivery.NewLimiter(c.TotalRate, c.BulkRate)
-	run, stop := context.WithCancel(ctx)
-	defer stop()
-	var workers sync.WaitGroup
 	errorsCh := make(chan error, 4)
 	hints := delivery.NewHints()
 	poller := &bot.Poller{Telegram: tg, Backend: backend, BotID: c.BotID, Updates: updates, Ready: ready(&polling), Hints: hints}
@@ -120,7 +123,6 @@ func Run(ctx context.Context, c Config) error {
 			_ = webhookServer.Close()
 		}
 	}
-	workers.Wait()
 	if errors.Is(err, http.ErrServerClosed) {
 		return nil
 	}
