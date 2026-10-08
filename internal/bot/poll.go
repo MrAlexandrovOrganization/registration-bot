@@ -11,6 +11,7 @@ import (
 	"google.golang.org/grpc/status"
 	pb "registration.local/frontend/api"
 	"registration.local/frontend/internal/delivery"
+	"registration.local/frontend/internal/resources"
 	"registration.local/frontend/internal/telegram"
 )
 
@@ -40,6 +41,10 @@ func Convert(u telegram.Update) *pb.Update {
 		from = u.Message.From
 		chat = u.Message.Chat
 		result.Text = u.Message.Text
+		// Reply buttons arrive as ordinary text messages, without callback_data.
+		if chat.Type == "private" && result.Text == resources.Text("cancel") {
+			result.Text = "/cancel"
+		}
 		result.MessageId = u.Message.ID
 		result.Kind = "message"
 		if u.Message.Contact != nil {

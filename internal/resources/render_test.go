@@ -24,6 +24,45 @@ func TestAllSurveyResourcesExist(t *testing.T) {
 	}
 }
 
+func TestRegistrationCompletedView(t *testing.T) {
+	text, markup := Render(&pb.View{Kind: "registered", Code: "registration_completed", Buttons: []*pb.Button{
+		{LabelKey: "edit", Data: "c:3:edit"},
+		{LabelKey: "about_button", Data: "info:about"},
+		{LabelKey: "bring_button", Data: "info:bring"},
+	}})
+	if !strings.Contains(string(text), "Спасибо за регистрацию") || strings.Contains(string(text), Text("registered_title")) {
+		t.Fatal("expected completion text instead of questionnaire")
+	}
+	if len(markup.InlineKeyboard) != 3 || markup.InlineKeyboard[0][0].CallbackData != "c:3:edit" || len(markup.Keyboard) != 0 || markup.Remove {
+		t.Fatal("completion must retain registered-user inline buttons")
+	}
+}
+
+func TestPhoneEditKeyboards(t *testing.T) {
+	for _, kind := range []string{"question", "validation"} {
+		_, markup := Render(&pb.View{Kind: kind, Field: "phone", Code: "invalid_phone", Buttons: []*pb.Button{{LabelKey: "cancel", Data: "c:2:cancel"}}})
+		if len(markup.InlineKeyboard) != 0 || len(markup.Keyboard) != 2 || !markup.Keyboard[0][0].RequestContact || markup.Keyboard[1][0].Text != Text("cancel") || markup.Keyboard[1][0].CallbackData != "" || markup.Keyboard[1][0].RequestContact {
+			t.Fatal("phone edit must combine contact sharing and cancellation in one reply keyboard")
+		}
+	}
+	for _, view := range []*pb.View{{Kind: "contact_keyboard"}, {Kind: "question", Field: "phone"}, {Kind: "validation", Field: "phone", Code: "invalid_phone"}} {
+		text, markup := Render(view)
+		if len(markup.InlineKeyboard) != 0 || len(markup.Keyboard) != 1 || !markup.Keyboard[0][0].RequestContact || !markup.Resize || !markup.OneTime {
+			t.Fatal("missing contact-sharing reply keyboard")
+		}
+		if strings.Contains(string(text), "/cancel") {
+			t.Fatal("contact prompt must not require a command")
+		}
+		if view.Kind == "contact_keyboard" && (string(text) != Text("share_contact") || strings.Contains(string(text), Text("question_phone"))) {
+			t.Fatal("keyboard caption must not repeat the phone question")
+		}
+	}
+	text, markup := Render(&pb.View{Kind: "notice", Code: "edit_cancelled"})
+	if string(text) != Text("edit_cancelled") || !markup.Remove || len(markup.InlineKeyboard) != 0 || len(markup.Keyboard) != 0 {
+		t.Fatal("cancellation must remove the contact keyboard")
+	}
+}
+
 func TestRegistrationOnlyViews(t *testing.T) {
 	text, _ := Render(&pb.View{Kind: "stats", Fields: []*pb.Field{{Key: "stats_0", Value: "4"}, {Key: "stats_7", Value: "1"}}})
 	if !strings.Contains(string(text), "Всего пользователей: 4") || strings.Contains(string(text), "Подтвердили участие") {

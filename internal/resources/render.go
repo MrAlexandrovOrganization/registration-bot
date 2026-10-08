@@ -49,9 +49,15 @@ func Render(v *pb.View) (tgfmt.HTML, Markup) {
 	switch v.Kind {
 	case "question":
 		appendText(Text("question_" + v.Field))
+	case "contact_keyboard":
+		appendText(Text("share_contact"))
 	case "validation":
 		appendText(Text(v.Code) + "\n" + Text("question_"+v.Field))
 	case "registered", "confirm":
+		if v.Kind == "registered" && v.Code == "registration_completed" {
+			appendText(Text(v.Code))
+			break
+		}
 		parts = append(parts, tgfmt.Bold(tgfmt.Escape(Text(v.Kind+"_title"))))
 		for _, f := range v.Fields {
 			parts = append(parts, tgfmt.Escape("\n"+Text(f.Key)+": "), tgfmt.Code(tgfmt.Escape(f.Value)))
@@ -60,7 +66,7 @@ func Render(v *pb.View) (tgfmt.HTML, Markup) {
 		appendText(Text("edit_title"))
 	case "notice":
 		appendText(Text(v.Code))
-	case "help", "help_public", "about", "bring", "poll":
+	case "welcome", "help", "help_public", "about", "bring", "poll":
 		if v.Kind == "help" && v.Code == "help_registration" {
 			appendText(Text(v.Code))
 		} else {
@@ -130,8 +136,13 @@ func Render(v *pb.View) (tgfmt.HTML, Markup) {
 			m.InlineKeyboard = append(m.InlineKeyboard, []Button{{Text: Text(b.LabelKey), CallbackData: b.Data}})
 		}
 	}
-	if (v.Kind == "question" || v.Kind == "validation") && v.Field == "phone" && len(v.Buttons) == 0 {
+	if v.Kind == "contact_keyboard" || ((v.Kind == "question" || v.Kind == "validation") && v.Field == "phone") {
 		m = Markup{Keyboard: [][]Button{{{Text: Text("share_contact"), RequestContact: true}}}, Resize: true, OneTime: true}
+		for _, b := range v.Buttons {
+			if b.LabelKey == "cancel" {
+				m.Keyboard = append(m.Keyboard, []Button{{Text: Text("cancel")}})
+			}
+		}
 	}
 	return tgfmt.Join(parts...), m
 }

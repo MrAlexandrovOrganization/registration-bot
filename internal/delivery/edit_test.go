@@ -7,12 +7,14 @@ import (
 	"reflect"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/segmentio/kafka-go"
 	pb "registration.local/frontend/api"
+	"registration.local/frontend/internal/resources"
 	"registration.local/frontend/internal/telegram"
 )
 
@@ -98,6 +100,50 @@ func TestEditDeliveryOutcomes(t *testing.T) {
 			}
 			if backend.completion.Outcome != tt.outcome || backend.completion.TelegramMessageId != tt.id {
 				t.Fatalf("completion %v", backend.completion)
+			}
+		})
+	}
+}
+
+func TestPhoneReplyKeyboardDelivery(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		view *pb.View
+	}{
+		{"show", &pb.View{Kind: "question", Field: "phone", Buttons: []*pb.Button{{LabelKey: "cancel", Data: "c:2:cancel"}}}},
+		{"cancel", &pb.View{Kind: "notice", Code: "edit_cancelled"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var received atomic.Bool
+			tg := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				received.Store(true)
+				var body struct {
+					Text   string           `json:"text"`
+					Markup resources.Markup `json:"reply_markup"`
+				}
+				if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+					t.Error(err)
+				}
+				if r.URL.Path != "/sendMessage" || len(body.Markup.InlineKeyboard) != 0 {
+					t.Error("reply keyboard changes require sendMessage without inline markup")
+				}
+				if tc.name == "show" {
+					if body.Text != resources.Text("question_phone") || len(body.Markup.Keyboard) != 2 || !body.Markup.Keyboard[0][0].RequestContact || body.Markup.Keyboard[1][0].Text != resources.Text("cancel") || body.Markup.Keyboard[1][0].CallbackData != "" {
+						t.Error("expected one phone question with contact-sharing and cancel reply buttons")
+					}
+				} else if !body.Markup.Remove || len(body.Markup.Keyboard) != 0 {
+					t.Error("cancellation must send remove_keyboard to Telegram")
+				}
+				_, _ = w.Write([]byte(`{"ok":true,"result":{"message_id":77}}`))
+			}))
+			defer tg.Close()
+			backend := &fakeBackend{job: &pb.Delivery{Id: 11, Lease: "fixture", Chat: 12, Kind: "view", View: tc.view}}
+			s := &Sender{Backend: backend, Telegram: &telegram.Client{Base: tg.URL + "/", HTTP: tg.Client()}, Limiter: NewLimiter(20, 15), Ready: func(bool) {}, Outcomes: prometheus.NewCounterVec(prometheus.CounterOpts{Name: "fixture_phone_delivery", Help: "test"}, []string{"outcome"})}
+			if err := s.handleID(t.Context(), "worker", 11, false); err != nil {
+				t.Fatal(err)
+			}
+			if !received.Load() || backend.completion.Outcome != "sent" {
+				t.Fatal("keyboard change was not delivered")
 			}
 		})
 	}

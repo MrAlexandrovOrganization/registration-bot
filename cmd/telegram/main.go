@@ -35,5 +35,6 @@ func run() int {
 		slog.Error("frontend stopped", "reason", err.Error())
 		return 1
 	}
+	slog.Info("Bot started!")
 	return 0
 }

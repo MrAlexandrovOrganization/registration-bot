@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"testing"
 
+	"registration.local/frontend/internal/resources"
 	"registration.local/frontend/internal/telegram"
 )
 
@@ -15,6 +16,23 @@ func TestContactOwnership(t *testing.T) {
 	p := Convert(u)
 	if p.Actor != 10 || p.ContactOwner != 99 || p.Id != 7 {
 		t.Fatal(p)
+	}
+}
+
+func TestReplyCancelConversion(t *testing.T) {
+	for _, tc := range []struct{ name, chatType, text, want string }{
+		{"private reply button", "private", resources.Text("cancel"), "/cancel"},
+		{"group text", "supergroup", resources.Text("cancel"), resources.Text("cancel")},
+		{"ordinary answer", "private", "Fixture answer", "Fixture answer"},
+		{"command", "private", "/cancel", "/cancel"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			u := telegram.Update{ID: 9, Message: &telegram.Message{ID: 5, From: telegram.User{ID: 10}, Chat: telegram.Chat{ID: 10, Type: tc.chatType}, Text: tc.text}}
+			got := Convert(u)
+			if got == nil || got.Text != tc.want || got.Callback != "" || got.Kind != "message" {
+				t.Fatalf("unexpected reply button conversion: %v", got)
+			}
+		})
 	}
 }
 func TestUnknownUpdateIgnored(t *testing.T) {
