@@ -37,6 +37,9 @@ test: proto-gen
 	go test ./... -count=1 -timeout=120s
 test-race: proto-gen
 	go test -race ./... -count=1 -timeout=180s
+.PHONY: benchmark
+benchmark: proto-gen
+	GOMAXPROCS=1 go test ./internal/bot ./internal/delivery -run='^$$' -bench='Benchmark(Webhook|Delivery)$$' -benchtime=3s -count=1 -timeout=180s
 build: proto-gen
 	go build -trimpath -o .bin/telegram ./cmd/telegram
 config-check:

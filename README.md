@@ -314,6 +314,9 @@ frontend не читает delivery IDs, а новый backend больше не
 
 ## Наблюдаемость
 
+`make benchmark` измеряет webhook ingress и sender на fake backend/Telegram.
+Сценарии, ограничения и результаты — [PERFORMANCE.md](docs/PERFORMANCE.md).
+
 JSON stdout с UTC time/service/level и trace_id/span_id активного контекста.
 Токен в URL, response descriptions, тела запросов и анкеты не логируются;
 Telegram errors преобразуются в безопасные коды. В тестах проверены HTTP и
