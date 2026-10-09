@@ -46,6 +46,9 @@ func Render(v *pb.View) (tgfmt.HTML, Markup) {
 	}
 	var parts []tgfmt.HTML
 	appendText := func(s string) { parts = append(parts, tgfmt.Escape(s)) }
+	if v.Kind == "help_public" || v.Kind == "help" {
+		appendText(Text("help_intro") + "\n\n")
+	}
 	switch v.Kind {
 	case "question":
 		appendText(Text("question_" + v.Field))
@@ -61,6 +64,9 @@ func Render(v *pb.View) (tgfmt.HTML, Markup) {
 		parts = append(parts, tgfmt.Bold(tgfmt.Escape(Text(v.Kind+"_title"))))
 		for _, f := range v.Fields {
 			parts = append(parts, tgfmt.Escape("\n"+Text(f.Key)+": "), tgfmt.Code(tgfmt.Escape(f.Value)))
+		}
+		if v.Kind == "registered" {
+			appendText("\n\n" + Text("registration_reminder"))
 		}
 	case "edit":
 		appendText(Text("edit_title"))

@@ -100,14 +100,15 @@ type Chat struct {
 	Title string `json:"title"`
 }
 type Message struct {
-	ID       int64  `json:"message_id"`
-	Date     int64  `json:"date"`
-	Caption  string `json:"caption"`
-	HasMedia bool   `json:"-"`
-	From     User   `json:"from"`
-	Chat     Chat   `json:"chat"`
-	Text     string `json:"text"`
-	Contact  *struct {
+	ID               int64  `json:"message_id"`
+	Date             int64  `json:"date"`
+	Caption          string `json:"caption"`
+	HasMedia         bool   `json:"-"`
+	HasPinnedMessage bool   `json:"-"`
+	From             User   `json:"from"`
+	Chat             Chat   `json:"chat"`
+	Text             string `json:"text"`
+	Contact          *struct {
 		Phone string `json:"phone_number"`
 		Owner int64  `json:"user_id"`
 	} `json:"contact"`
@@ -123,6 +124,7 @@ func (m *Message) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &fields); err != nil {
 		return err
 	}
+	_, decoded.HasPinnedMessage = fields["pinned_message"]
 	for _, key := range []string{"photo", "animation", "audio", "document", "paid_media", "sticker", "story", "video", "video_note", "voice", "caption"} {
 		if _, ok := fields[key]; ok {
 			decoded.HasMedia = true

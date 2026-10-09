@@ -38,6 +38,11 @@ func Convert(u telegram.Update) *pb.Update {
 		result.Callback = u.Callback.Data
 		result.MessageId = u.Callback.Message.ID
 	case u.Message != nil:
+		// pinChatMessage produces a service update, potentially authored by the
+		// bot in a user's private chat. It is not an answer or a new command.
+		if u.Message.HasPinnedMessage {
+			return nil
+		}
 		from = u.Message.From
 		chat = u.Message.Chat
 		result.Text = u.Message.Text

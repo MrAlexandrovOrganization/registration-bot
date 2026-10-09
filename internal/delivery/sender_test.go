@@ -66,3 +66,39 @@ func TestSenderPersistedCooldownPreventsHTTP(t *testing.T) {
 		t.Fatal("unclaimed job completed")
 	}
 }
+
+func TestSenderRegistrationPin(t *testing.T) {
+	for _, tc := range []struct {
+		code    int
+		outcome string
+	}{{200, "sent"}, {429, "rate_limit"}, {500, "transient"}, {403, "permanent"}} {
+		t.Run(strconv.Itoa(tc.code), func(t *testing.T) {
+			calls := 0
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				calls++
+				var body struct {
+					Chat    int64 `json:"chat_id"`
+					Message int64 `json:"message_id"`
+					Silent  bool  `json:"disable_notification"`
+				}
+				if err := json.NewDecoder(r.Body).Decode(&body); err != nil || r.URL.Path != "/pinChatMessage" || body.Chat != 123 || body.Message != 777 || !body.Silent {
+					t.Error("incorrect pin request")
+				}
+				w.WriteHeader(tc.code)
+				_ = json.NewEncoder(w).Encode(map[string]any{"ok": tc.code == 200, "result": true, "error_code": tc.code, "parameters": map[string]int{"retry_after": 30}})
+			}))
+			defer server.Close()
+			backend := &fakeBackend{job: &pb.Delivery{Id: 11, Lease: "owned", Chat: 123, Kind: "pin", SourceMessage: 777}}
+			sender := &Sender{Backend: backend, Telegram: &telegram.Client{Base: server.URL + "/", HTTP: server.Client()}, Limiter: NewLimiter(20, 15), Ready: func(bool) {}, Outcomes: prometheus.NewCounterVec(prometheus.CounterOpts{Name: "test_pin_total", Help: "test"}, []string{"outcome"})}
+			if err := sender.handleID(context.Background(), "fixture-worker", 11, false); err != nil {
+				t.Fatal(err)
+			}
+			if calls != 1 || backend.completion.Outcome != tc.outcome || backend.completion.TelegramMessageId != 777 {
+				t.Fatal("pin result must be persisted without sending another message")
+			}
+			if tc.code == 429 && backend.completion.RetryAfterSeconds != 30 {
+				t.Fatal("lost pin retry delay")
+			}
+		})
+	}
+}

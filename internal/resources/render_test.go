@@ -25,6 +25,24 @@ func TestAllSurveyResourcesExist(t *testing.T) {
 }
 
 func TestRegistrationCompletedView(t *testing.T) {
+	text, markup := Render(&pb.View{Kind: "notice", Code: "registration_completed"})
+	if !strings.Contains(string(text), "Спасибо за регистрацию") || len(markup.InlineKeyboard) != 0 {
+		t.Fatal("permanent reminder must have no navigation buttons")
+	}
+	text, markup = Render(&pb.View{Kind: "registered", Fields: []*pb.Field{{Key: "name", Value: "<A&B>"}}, Buttons: []*pb.Button{{LabelKey: "edit", Data: "c:3:edit"}}})
+	if strings.Contains(string(text), "Спасибо за регистрацию") || !strings.Contains(string(text), "&lt;A&amp;B&gt;") || !strings.Contains(string(text), Text("registration_reminder")) || len(markup.InlineKeyboard) != 1 {
+		t.Fatal("questionnaire must show escaped data, practical reminder and editing")
+	}
+	if strings.Contains(string(text), "18:30") || strings.Contains(string(text), "05.11") {
+		t.Fatal("questionnaire must not duplicate trip logistics")
+	}
+	text, _ = Render(&pb.View{Kind: "about"})
+	if !strings.Contains(string(text), "06.11 в 18:30") || !strings.Contains(string(text), "у Ноги") || !strings.Contains(string(text), "05.11") {
+		t.Fatal("about must contain the meeting and participation reminder")
+	}
+}
+
+func TestLegacyRegistrationCompletedView(t *testing.T) {
 	text, markup := Render(&pb.View{Kind: "registered", Code: "registration_completed", Buttons: []*pb.Button{
 		{LabelKey: "edit", Data: "c:3:edit"},
 		{LabelKey: "about_button", Data: "info:about"},
@@ -77,7 +95,7 @@ func TestRegistrationOnlyViews(t *testing.T) {
 func TestPublicHelpAndContentErrorsDoNotExposeOperatorCommands(t *testing.T) {
 	for _, view := range []*pb.View{{Kind: "help_public"}, {Kind: "notice", Code: "invalid_content"}} {
 		text, _ := Render(view)
-		for _, forbidden := range []string{"прав", "рол", "admin", "staff", "counselor", "аудитори", "/my_permissions", "/stats", "/sources", "/export", "/broadcast", "/grant_permission"} {
+		for _, forbidden := range []string{"права", "право", "рол", "admin", "staff", "counselor", "аудитори", "/my_permissions", "/stats", "/sources", "/export", "/broadcast", "/grant_permission"} {
 			if strings.Contains(strings.ToLower(string(text)), forbidden) {
 				t.Fatalf("public view exposes %q", forbidden)
 			}

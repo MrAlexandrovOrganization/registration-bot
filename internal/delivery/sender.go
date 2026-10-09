@@ -120,7 +120,7 @@ func (s *Sender) handleID(ctx context.Context, worker string, id int64, bulk boo
 	if err = s.Limiter.Wait(work, d.Chat, d.Group, bulk); err == nil {
 		var message int64
 		switch d.Kind {
-		case "view":
+		case "view", "registration_completed":
 			text, markup := resources.Render(d.View)
 			if d.EditMessageId > 0 {
 				message, err = s.Telegram.Edit(work, d.Chat, d.EditMessageId, text, markup)
@@ -132,6 +132,17 @@ func (s *Sender) handleID(ctx context.Context, worker string, id int64, bulk boo
 				}
 			} else {
 				message, err = s.Telegram.Send(work, d.Chat, text, markup)
+			}
+		case "pin":
+			message = d.SourceMessage
+			if message <= 0 {
+				err = &telegram.APIError{Code: 400}
+			} else {
+				err = s.Telegram.Call(work, "pinChatMessage", struct {
+					Chat    int64 `json:"chat_id"`
+					Message int64 `json:"message_id"`
+					Silent  bool  `json:"disable_notification"`
+				}{d.Chat, message, true}, nil)
 			}
 		case "copy":
 			message, err = s.Telegram.Copy(work, d.Chat, d.SourceChat, d.SourceMessage)
@@ -149,7 +160,7 @@ func (s *Sender) handleID(ctx context.Context, worker string, id int64, bulk boo
 		completion.TelegramMessageId = message
 	}
 	completion.Outcome, completion.RetryAfterSeconds = Classify(err)
-	if d.Kind == "sync" && completion.Outcome == "blocked" {
+	if (d.Kind == "sync" || d.Kind == "pin") && completion.Outcome == "blocked" {
 		completion.Outcome = "permanent"
 	}
 	// Report using a fresh context: cancellation of an HTTP call must not prevent durable completion.

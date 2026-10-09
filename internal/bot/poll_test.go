@@ -41,6 +41,34 @@ func TestUnknownUpdateIgnored(t *testing.T) {
 	}
 }
 
+func TestPinnedServiceMessageIgnored(t *testing.T) {
+	for _, actor := range []int64{1000, 10} {
+		data, err := json.Marshal(map[string]any{
+			"update_id": 12,
+			"message": map[string]any{
+				"message_id":     80,
+				"from":           map[string]any{"id": actor},
+				"chat":           map[string]any{"id": 10, "type": "private"},
+				"pinned_message": map[string]any{"message_id": 77, "text": "Fixture reminder"},
+			},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		var update telegram.Update
+		if err := json.Unmarshal(data, &update); err != nil {
+			t.Fatal(err)
+		}
+		if Convert(update) != nil {
+			t.Fatal("pin service update must not be submitted as a questionnaire answer")
+		}
+		// The shared ingress must acknowledge unsupported updates without any RPC.
+		if err := (&Poller{}).Accept(t.Context(), update); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
 func TestStartPayloadPreserved(t *testing.T) {
 	var u telegram.Update
 	if err := json.Unmarshal([]byte(`{"update_id":8,"message":{"message_id":5,"from":{"id":10},"chat":{"id":10,"type":"private"},"text":"/start campaign_1"}}`), &u); err != nil {
