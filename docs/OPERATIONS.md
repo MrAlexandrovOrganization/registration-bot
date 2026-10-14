@@ -4,12 +4,12 @@
 
 Репозиторий независимый, пока не опубликован. Workflow `.github/workflows/ci.yml`
 запускает на PR/push main `make install`, `make check`, `make test-race`, `make build`
-и отдельный job `make compose-build`. Проверки используют синтетические значения,
+и затем image job `make image-check image-build` (push main также `make image-publish`). Проверки используют синтетические значения,
 fake Telegram, не подключаются к production. `config-check` проверяет polling и webhook.
 
-Deploy зависит от успешных check/build, только push main и **repository variable
+Deploy зависит от успешных проверок и публикации images, только push main и **repository variable
 `DEPLOY_ENABLED=true`**. По умолчанию пропущен. Все jobs используют `ubuntu-24.04`,
-как notes-bot и subscription-catalog. Deploy использует environment `production`:
+как notes-bot и subscription-catalog. Environment `production` сейчас не подключён; при его добавлении:
 в нём можно хранить environment secrets и настроить protection rules, например
 required reviewers и разрешённую ветку main. Само `environment: production` не включает
 approval — он требуется только при настроенном правиле. Repository/environment
@@ -24,7 +24,7 @@ secrets этого репозитория:
 
 Pinning SSH host key для подключения Actions → VM не настроен.
 
-Provisioning: Git, Bash, Make, flock/util-linux, Docker Compose v2 с `up --wait --wait-timeout`,
+Provisioning: Python 3.9+, Git, Bash, Make, flock/util-linux, Docker Compose v2 с `up --wait --wait-timeout`,
 доступ к registry/GitHub; чистый независимый clone main с origin этого репозитория.
 Private origin требует отдельного read-only deploy key VM → GitHub и
 known_hosts. `.env` хранится только на VM с ограниченными правами. Нужны backend,
@@ -36,10 +36,11 @@ known_hosts. `.env` хранится только на VM с ограничен�
 SSH-шаг workflow проверяет корень/чистоту/main (включая untracked-файлы, кроме
 игнорируемых), получает main из origin и сверяет FETCH_HEAD с проверенным SHA.
 После fast-forward строго на этот SHA проверяет HEAD; устаревшему workflow,
-divergent checkout или локальным правкам отказывает. Затем вызывает `make up`, как
-локально: пересобирает образ и ждёт Compose healthcheck до 180 секунд
+divergent checkout или локальным правкам отказывает. Затем вызывает `make image-deploy`: скачивает опубликованный digest
+и ждёт Compose healthcheck до 180 секунд
 (`--wait --wait-timeout 180`). Проверяется `/readyz`; предусмотрено ожидание
-предыдущего sender lease до 90 секунд. CI не публикует образ.
+предыдущего sender lease до 90 секунд. CI публикует образ в GHCR; VM скачивает digest manifest без повторной сборки.
+Для явных webhook/CLI-команд используйте `make image-compose IMAGE_ARGS='run --rm telegram COMMAND'`.
 Frontend ожидает стартовый Claim внутри процесса до 120 секунд, повторяя его
 через 2 секунды при ResourceExhausted (занят sender lease), Unavailable или
 DeadlineExceeded. В ожидании HTTP listener ещё не запущен и readiness не проходит.

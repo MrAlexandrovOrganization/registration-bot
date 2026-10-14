@@ -7,7 +7,8 @@ ARG ALPINE_VERSION
 FROM golang:${GO_VERSION}-alpine${GO_ALPINE_VERSION} AS build
 WORKDIR /src
 RUN apk add --no-cache make
-COPY go.mod go.sum Makefile versions.mk ./
+COPY go.mod go.sum Makefile ./
+COPY makefiles/versions.mk makefiles/versions.mk
 RUN go mod download
 RUN make install-proto
 COPY . .

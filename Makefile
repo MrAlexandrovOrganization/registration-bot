@@ -1,5 +1,5 @@
 DOCKER_COMPOSE = docker compose
-include versions.mk
+include makefiles/versions.mk
 BIN = $(CURDIR)/.bin
 
 .PHONY: install install-proto install-hooks run format check test test-race build proto-gen proto-check config-check compose-build up down logs restart
@@ -67,3 +67,6 @@ register-webhook:
 	$(DOCKER_COMPOSE) run --rm --no-deps telegram register-webhook
 delete-webhook:
 	$(DOCKER_COMPOSE) run --rm --no-deps telegram delete-webhook
+
+include makefiles/images.mk
+include makefiles/ci-deploy.mk

@@ -8,7 +8,7 @@ Builds never sync the snapshot or require sibling checkouts, BSR or remote plugi
 make install-proto installs Buf and local Go plugins into .bin; make proto-gen uses
 Buf v2 inputs from buf.gen.yaml. Preserve paths=source_relative and
 Mapi/registration.proto=registration.local/frontend/api for BOTH plugins.
-Buf and gRPC plugin versions belong in versions.mk; the Go protobuf plugin version
+Buf and gRPC plugin versions belong in makefiles/versions.mk; the Go protobuf plugin version
 comes from go.mod. Use make versions and reinstall after version changes.
 make proto-check runs buf build and is part of make check; it checks schema compilation,
 not snapshot equality or breaking changes. Breaking checks alone cannot verify RPC
@@ -32,7 +32,13 @@ One frontend instance per bot. Do not start it against a live token during tests
 
 Read docs/OPERATIONS.md before delivery. CI checks/builds PR/push main; SSH CD
 requires repository DEPLOY_ENABLED=true after provisioning/coordinated migration 004/005.
-SSH workflow fast-forwards main to the checked SHA, then runs the same make up as locally.
+SSH workflow loads makefiles/ci-deploy.mk from the checked SHA and runs make ci-deploy.
+That target locks delivery, fast-forwards clean main, logs in temporarily and runs
+make image-deploy using the updated checkout; stale workflows are rejected.
+CI publishes the built images to GHCR; image-deploy pulls digests, then runs
+image-activate preserving the existing migration/readiness order without building.
+make up remains the local source-build workflow. See README image delivery.
+Explicit CLI operations after delivery use make image-compose IMAGE_ARGS=... .
 make up builds and waits for healthchecks (180s); up, register-webhook and delete-webhook are live operations, never tests.
 No automatic webhook registration/deletion, topic creation, imports or migrations in frontend CD.
 Run backend make up first (it applies migrations), then frontend make up; see docs/OPERATIONS.md.
