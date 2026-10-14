@@ -30,8 +30,8 @@ data and fake Telegram HTTP; they never register webhooks or send live messages.
 make run/up use real configuration and immediately start the frontend.
 One frontend instance per bot. Do not start it against a live token during tests.
 
-Read docs/OPERATIONS.md before delivery. CI checks/builds PR/push main; SSH CD
-requires repository DEPLOY_ENABLED=true after provisioning/coordinated migration 004/005.
+Read docs/OPERATIONS.md before delivery. CI checks/builds PR/push main. SSH CD
+follows provisioning and coordinated migration 004/005 rollout.
 SSH workflow loads makefiles/ci-deploy.mk from the checked SHA and runs make ci-deploy.
 That target locks delivery, fast-forwards clean main, logs in temporarily and runs
 make image-deploy using the updated checkout; stale workflows are rejected.
