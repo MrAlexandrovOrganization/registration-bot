@@ -105,12 +105,12 @@ func TestRegistrationCountAndMilestoneViews(t *testing.T) {
 
 func TestStaffChatSetupNotices(t *testing.T) {
 	started, _ := Render(&pb.View{Kind: "notice", Code: "staff_sync_required"})
-	if !strings.Contains(string(started), "/sync_staff_chat") || !strings.Contains(string(started), "начальный счётчик") {
-		t.Fatalf("staff chat setup should explain the required membership sync: %s", started)
+	if string(started) != "Служебная группа сохранена." {
+		t.Fatalf("unexpected staff chat setup text: %s", started)
 	}
 	incomplete, _ := Render(&pb.View{Kind: "notice", Code: "staff_sync_incomplete"})
-	if !strings.Contains(string(incomplete), "счётчик пока не отправлен") || !strings.Contains(string(incomplete), "/sync_staff_chat") {
-		t.Fatalf("incomplete staff sync should explain why the count is withheld: %s", incomplete)
+	if string(incomplete) != "Не удалось проверить всех известных участников; начальный счётчик пока не отправлен." {
+		t.Fatalf("unexpected incomplete staff sync text: %s", incomplete)
 	}
 }
 
