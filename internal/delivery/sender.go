@@ -154,13 +154,15 @@ func (s *Sender) handleID(ctx context.Context, worker string, id int64, bulk boo
 			}
 		case "sync":
 			err = s.syncMembers(work, d, completion)
+		case "membership_check":
+			err = s.checkMembership(work, d)
 		default:
 			err = &telegram.APIError{Code: 400}
 		}
 		completion.TelegramMessageId = message
 	}
 	completion.Outcome, completion.RetryAfterSeconds = Classify(err)
-	if (d.Kind == "sync" || d.Kind == "pin") && completion.Outcome == "blocked" {
+	if (d.Kind == "sync" || d.Kind == "membership_check" || d.Kind == "pin") && completion.Outcome == "blocked" {
 		completion.Outcome = "permanent"
 	}
 	// Report using a fresh context: cancellation of an HTTP call must not prevent durable completion.
@@ -218,6 +220,28 @@ func (s *Sender) syncMembers(ctx context.Context, d *pb.Delivery, out *pb.Comple
 	}
 	return nil
 }
+
+func (s *Sender) checkMembership(ctx context.Context, d *pb.Delivery) error {
+	if d.View == nil || (d.View.Code != "staff" && d.View.Code != "counselor") || d.SourceChat == 0 || d.SourceMessage <= 0 {
+		return &telegram.APIError{Code: 400}
+	}
+	var member struct {
+		Status   string `json:"status"`
+		IsMember bool   `json:"is_member"`
+	}
+	if err := s.Telegram.Call(ctx, "getChatMember", struct {
+		Chat int64 `json:"chat_id"`
+		User int64 `json:"user_id"`
+	}{d.SourceChat, d.SourceMessage}, &member); err != nil {
+		return err
+	}
+	_, err := s.Backend.SyncMember(ctx, &pb.SyncMemberRequest{
+		Actor: d.Actor, Chat: d.SourceChat, User: d.SourceMessage,
+		Active: telegram.Active(member.Status, member.IsMember),
+	})
+	return err
+}
+
 func Classify(err error) (string, int64) {
 	if err == nil {
 		return "sent", 0

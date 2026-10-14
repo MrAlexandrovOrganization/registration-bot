@@ -57,7 +57,7 @@ GitHub сериализует deploy jobs; `$HOME/.registration-deploy.lock` п�
 Frontend CD не регистрирует webhook, не создаёт топики, не запускает импорт/миграции.
 Миграции применяет backend `make up` до запуска backend; frontend обновляется после него.
 
-## Первый запуск и migration 004
+## Первый запуск и migrations 004/005
 
 Держать CD выключенным в **обоих** репозиториях до provisioning и первого
 согласованного переключения. Полный runbook — backend `docs/OPERATIONS.md`,
@@ -67,7 +67,7 @@ Frontend CD не регистрирует webhook, не создаёт топи�
 Остановить старый frontend/Python poller, затем backend; сделать backup PostgreSQL,
 выбрать пару SHA с зелёным CI и одинаковым proto. Обновить и собрать оба checkout.
 Сначала выполнить backend `make up`: он собирает образ, останавливает backend,
-выполняет `database-up`, затем `migrate-compose` (включая migration 004) и запускает backend.
+выполняет `database-up`, затем `migrate-compose` (включая migrations 004/005) и запускает backend.
 После успешного завершения выполнить новый frontend `make up`; frontend миграции не запускает.
 Нельзя включать новый backend со старым frontend: Kafka теперь broadcast-only,
 интерактивная доставка требует Accept delivery IDs и PendingInteractive recovery.
@@ -105,5 +105,5 @@ Prometheus scrape: `telegram:9093/metrics` в prometheus-net; настройка
 
 Ошибка readiness делает CD неуспешным, но не откатывает контейнеры/checkout.
 Остановить приём, проверить безопасные логи (без токенов/updates), согласовать пару
-версий. Нельзя откатывать один компонент за границу migration 004. Предпочтительно
+версий. Нельзя откатывать один компонент за границу migrations 004/005. Предпочтительно
 исправление вперёд; restore БД требует backend runbook и учёта повторных отправок.

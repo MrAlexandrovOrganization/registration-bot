@@ -92,6 +92,28 @@ func TestRegistrationOnlyViews(t *testing.T) {
 	}
 }
 
+func TestRegistrationCountAndMilestoneViews(t *testing.T) {
+	initial, initialMarkup := Render(&pb.View{Kind: "registration_count", Numbers: []int64{163}})
+	if string(initial) != "Сейчас зарегистрировано участников: 163." || !initialMarkup.Remove {
+		t.Fatalf("unexpected initial count message: %s", initial)
+	}
+	milestone, milestoneMarkup := Render(&pb.View{Kind: "registration_milestone", Numbers: []int64{170}})
+	if string(milestone) != "Зарегистрировано участников: 170!" || !milestoneMarkup.Remove {
+		t.Fatalf("unexpected milestone message: %s", milestone)
+	}
+}
+
+func TestStaffChatSetupNotices(t *testing.T) {
+	started, _ := Render(&pb.View{Kind: "notice", Code: "staff_sync_required"})
+	if !strings.Contains(string(started), "/sync_staff_chat") || !strings.Contains(string(started), "начальный счётчик") {
+		t.Fatalf("staff chat setup should explain the required membership sync: %s", started)
+	}
+	incomplete, _ := Render(&pb.View{Kind: "notice", Code: "staff_sync_incomplete"})
+	if !strings.Contains(string(incomplete), "счётчик пока не отправлен") || !strings.Contains(string(incomplete), "/sync_staff_chat") {
+		t.Fatalf("incomplete staff sync should explain why the count is withheld: %s", incomplete)
+	}
+}
+
 func TestPublicHelpAndContentErrorsDoNotExposeOperatorCommands(t *testing.T) {
 	for _, view := range []*pb.View{{Kind: "help_public"}, {Kind: "notice", Code: "invalid_content"}} {
 		text, _ := Render(view)

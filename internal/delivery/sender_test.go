@@ -20,6 +20,7 @@ type fakeBackend struct {
 	pb.RegistrationClient
 	job        *pb.Delivery
 	completion *pb.Completion
+	syncMember *pb.SyncMemberRequest
 }
 
 func (f *fakeBackend) Claim(_ context.Context, r *pb.ClaimRequest, _ ...grpc.CallOption) (*pb.Delivery, error) {
@@ -30,6 +31,10 @@ func (f *fakeBackend) Claim(_ context.Context, r *pb.ClaimRequest, _ ...grpc.Cal
 }
 func (f *fakeBackend) Complete(_ context.Context, r *pb.Completion, _ ...grpc.CallOption) (*pb.Receipt, error) {
 	f.completion = r
+	return &pb.Receipt{}, nil
+}
+func (f *fakeBackend) SyncMember(_ context.Context, r *pb.SyncMemberRequest, _ ...grpc.CallOption) (*pb.Receipt, error) {
+	f.syncMember = r
 	return &pb.Receipt{}, nil
 }
 func TestSenderRateLimitAndDuplicate(t *testing.T) {
@@ -64,6 +69,43 @@ func TestSenderPersistedCooldownPreventsHTTP(t *testing.T) {
 	}
 	if backend.completion != nil {
 		t.Fatal("unclaimed job completed")
+	}
+}
+
+func TestSenderChecksNewUsersAgainstStaffGroup(t *testing.T) {
+	calls := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		var request struct {
+			Chat int64 `json:"chat_id"`
+			User int64 `json:"user_id"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil || r.URL.Path != "/getChatMember" || request.Chat != -100 || request.User != 12345 {
+			t.Error("incorrect getChatMember request")
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"ok":     true,
+			"result": map[string]any{"status": "member", "is_member": true},
+		})
+	}))
+	defer server.Close()
+	backend := &fakeBackend{job: &pb.Delivery{
+		Id: 12, Lease: "owned", Chat: 12345, Actor: 1, Kind: "membership_check",
+		SourceChat: -100, SourceMessage: 12345, View: &pb.View{Code: "staff"},
+	}}
+	sender := &Sender{
+		Backend: backend, Telegram: &telegram.Client{Base: server.URL + "/", HTTP: server.Client()},
+		Limiter: NewLimiter(20, 15), Ready: func(bool) {},
+		Outcomes: prometheus.NewCounterVec(prometheus.CounterOpts{Name: "test_membership_check_total", Help: "test"}, []string{"outcome"}),
+	}
+	if err := sender.handleID(context.Background(), "fixture-worker", 12, false); err != nil {
+		t.Fatal(err)
+	}
+	if calls != 1 || backend.syncMember == nil || backend.syncMember.Actor != 1 || backend.syncMember.Chat != -100 || backend.syncMember.User != 12345 || !backend.syncMember.Active {
+		t.Fatal("new user's group membership was not persisted")
+	}
+	if backend.completion == nil || backend.completion.Outcome != "sent" {
+		t.Fatal("membership check completion was not persisted")
 	}
 }
 

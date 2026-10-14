@@ -124,9 +124,13 @@ func Render(v *pb.View) (tgfmt.HTML, Markup) {
 				appendText("\n" + Text(f.Key) + ": " + f.Value)
 			}
 		}
-	case "milestone":
+	case "registration_count":
 		if len(v.Numbers) > 0 {
-			appendText(fmt.Sprintf(Text("milestone"), v.Numbers[0]))
+			appendText(fmt.Sprintf(Text("registration_count"), v.Numbers[0]))
+		}
+	case "registration_milestone":
+		if len(v.Numbers) > 0 {
+			appendText(fmt.Sprintf(Text("registration_milestone"), v.Numbers[0]))
 		}
 	case "sync_done":
 		if len(v.Numbers) >= 2 {

@@ -31,7 +31,7 @@ make run/up use real configuration and immediately start the frontend.
 One frontend instance per bot. Do not start it against a live token during tests.
 
 Read docs/OPERATIONS.md before delivery. CI checks/builds PR/push main; SSH CD
-requires repository DEPLOY_ENABLED=true after provisioning/coordinated migration 004.
+requires repository DEPLOY_ENABLED=true after provisioning/coordinated migration 004/005.
 SSH workflow fast-forwards main to the checked SHA, then runs the same make up as locally.
 make up builds and waits for healthchecks (180s); up, register-webhook and delete-webhook are live operations, never tests.
 No automatic webhook registration/deletion, topic creation, imports or migrations in frontend CD.
