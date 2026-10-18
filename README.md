@@ -81,7 +81,7 @@ coordinated rollout migrations 004/005 описаны в [OPERATIONS.md](docs/OP
 Подготовить `.env` из `.env.example`: `BOT_TOKEN`, `BACKEND_TOKEN` и отдельный
 `TELEGRAM_WEBHOOK_SECRET` для webhook-режима (в polling не используется).
 `WEBHOOK_URL` в `.env` включает webhook (пустое значение — polling).
-Остальные адреса, лимиты, Kafka и наблюдаемость заданы явно в `docker-compose.yml`.
+Остальные адреса, лимиты, Kafka и наблюдаемость заданы явно в `compose/docker-compose.yml`.
 
 Backend обязателен; топик Kafka нужен для рассылок. Интерактивные ответы работают
 и при недоступной Kafka. Бот запускается командой
@@ -421,3 +421,15 @@ VM нужны Python 3.9+, Make, Docker Compose с `--wait`, Git и flock для
 обходные Compose-операции одновременно с доставкой. При первом переходе на GHCR
 `previous.json` ещё отсутствует: сохраните прежние локальные образы и конфигурацию
 для восстановления по runbook до первого релиза.
+
+## Структура Compose
+
+Файлы Docker Compose находятся в `compose/`; основной файл — `compose/docker-compose.yml`.
+Команды запускайте из корня проекта через Makefile: он задаёт `--project-directory`
+на корень checkout. Build contexts, bind mounts, `env_file` и секреты остаются
+относительными к этому корню; имена Compose project, сервисов, сетей и томов сохранены.
+При явном вызове Docker используйте `docker compose --project-directory . -f compose/docker-compose.yml ...`.
+Если в приватной `.env` или окружении задан `COMPOSE_FILE`, добавьте `compose/`
+к прежним именам файлов, сохранив прежний набор overlays и порядок. Для плавного
+перехода Make также распознаёт прежние короткие имена, если файлы уже перенесены.
+Не меняйте project name и не удаляйте прежние тома для переноса файлов.
