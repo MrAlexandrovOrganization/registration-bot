@@ -122,7 +122,9 @@ func (s *Sender) handleID(ctx context.Context, worker string, id int64, bulk boo
 		switch d.Kind {
 		case "view", "registration_completed":
 			text, markup := resources.Render(d.View)
-			if d.EditMessageId > 0 {
+			if d.View.GetPhotoFileId() != "" {
+				message, err = s.Telegram.Photo(work, d.Chat, d.View.PhotoFileId, text, markup)
+			} else if d.EditMessageId > 0 {
 				message, err = s.Telegram.Edit(work, d.Chat, d.EditMessageId, text, markup)
 				var api *telegram.APIError
 				if errors.As(err, &api) && api.Uneditable && !api.Uncertain {
@@ -132,6 +134,12 @@ func (s *Sender) handleID(ctx context.Context, worker string, id int64, bulk boo
 				}
 			} else {
 				message, err = s.Telegram.Send(work, d.Chat, text, markup)
+			}
+		case "survey_remove_keyboard":
+			if d.SourceMessage <= 0 {
+				err = &telegram.APIError{Code: 400}
+			} else {
+				message, err = s.Telegram.RemoveKeyboard(work, d.Chat, d.SourceMessage)
 			}
 		case "pin":
 			message = d.SourceMessage
@@ -162,7 +170,7 @@ func (s *Sender) handleID(ctx context.Context, worker string, id int64, bulk boo
 		completion.TelegramMessageId = message
 	}
 	completion.Outcome, completion.RetryAfterSeconds = Classify(err)
-	if (d.Kind == "sync" || d.Kind == "membership_check" || d.Kind == "pin") && completion.Outcome == "blocked" {
+	if (d.Kind == "sync" || d.Kind == "membership_check" || d.Kind == "pin" || d.Kind == "survey_remove_keyboard") && completion.Outcome == "blocked" {
 		completion.Outcome = "permanent"
 	}
 	// Report using a fresh context: cancellation of an HTTP call must not prevent durable completion.

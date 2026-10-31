@@ -46,6 +46,17 @@ func Convert(u telegram.Update) *pb.Update {
 		from = u.Message.From
 		chat = u.Message.Chat
 		result.Text = u.Message.Text
+		var area int64
+		for _, photo := range u.Message.Photo {
+			size := int64(photo.Width) * int64(photo.Height)
+			if photo.FileID != "" && size >= area {
+				area = size
+				result.PhotoFileId = photo.FileID
+			}
+		}
+		if result.PhotoFileId != "" {
+			result.PhotoCaption = u.Message.Caption
+		}
 		// Reply buttons arrive as ordinary text messages, without callback_data.
 		if chat.Type == "private" && result.Text == resources.Text("cancel") {
 			result.Text = "/cancel"

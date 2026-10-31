@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strconv"
+	"strings"
 
 	pb "registration.local/frontend/api"
 	"registration.local/frontend/internal/tgfmt"
@@ -63,11 +64,16 @@ func Render(v *pb.View) (tgfmt.HTML, Markup) {
 		}
 		parts = append(parts, tgfmt.Bold(tgfmt.Escape(Text(v.Kind+"_title"))))
 		for _, f := range v.Fields {
+			if strings.HasPrefix(f.Key, "survey_") {
+				continue
+			}
 			parts = append(parts, tgfmt.Escape("\n"+Text(f.Key)+": "), tgfmt.Code(tgfmt.Escape(f.Value)))
 		}
 		if v.Kind == "registered" {
 			appendText("\n\n" + Text("registration_reminder"))
 		}
+	case "survey_question", "survey_broadcast", "survey_preview", "survey_manage", "survey_notice", "survey_list", "survey_results", "survey_people":
+		parts = append(parts, renderSurvey(v))
 	case "edit":
 		appendText(Text("edit_title"))
 	case "notice":
@@ -139,11 +145,18 @@ func Render(v *pb.View) (tgfmt.HTML, Markup) {
 	default:
 		appendText(Text("command_usage"))
 	}
+	if v.Kind == "help" {
+		appendText("\n\n" + Text("survey_help"))
+	}
 	m := Markup{Remove: true}
 	if len(v.Buttons) > 0 {
 		m = Markup{}
 		for _, b := range v.Buttons {
-			m.InlineKeyboard = append(m.InlineKeyboard, []Button{{Text: Text(b.LabelKey), CallbackData: b.Data}})
+			label := b.Label
+			if label == "" {
+				label = Text(b.LabelKey)
+			}
+			m.InlineKeyboard = append(m.InlineKeyboard, []Button{{Text: label, CallbackData: b.Data}})
 		}
 	}
 	if v.Kind == "contact_keyboard" || ((v.Kind == "question" || v.Kind == "validation") && v.Field == "phone") {

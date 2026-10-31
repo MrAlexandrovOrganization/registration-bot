@@ -68,7 +68,7 @@ func (c *Client) request(ctx context.Context, method, contentType string, body i
 	if !envelope.OK {
 		e := &APIError{Code: envelope.Code, RetryAfter: envelope.Parameters.RetryAfter}
 		// Keep only allowlisted classifications, never retain Telegram descriptions.
-		if method == "editMessageText" && envelope.Code == 400 && response.StatusCode == 400 {
+		if (method == "editMessageText" || method == "editMessageReplyMarkup") && envelope.Code == 400 && response.StatusCode == 400 {
 			description := strings.ToLower(envelope.Description)
 			e.NotModified = description == "bad request: message is not modified" || strings.HasPrefix(description, "bad request: message is not modified:")
 			e.Uneditable = description == "bad request: message to edit not found" || description == "bad request: message can't be edited"
@@ -99,15 +99,21 @@ type Chat struct {
 	Type  string `json:"type"`
 	Title string `json:"title"`
 }
+type PhotoSize struct {
+	FileID string `json:"file_id"`
+	Width  int    `json:"width"`
+	Height int    `json:"height"`
+}
 type Message struct {
-	ID               int64  `json:"message_id"`
-	Date             int64  `json:"date"`
-	Caption          string `json:"caption"`
-	HasMedia         bool   `json:"-"`
-	HasPinnedMessage bool   `json:"-"`
-	From             User   `json:"from"`
-	Chat             Chat   `json:"chat"`
-	Text             string `json:"text"`
+	Photo            []PhotoSize `json:"photo"`
+	ID               int64       `json:"message_id"`
+	Date             int64       `json:"date"`
+	Caption          string      `json:"caption"`
+	HasMedia         bool        `json:"-"`
+	HasPinnedMessage bool        `json:"-"`
+	From             User        `json:"from"`
+	Chat             Chat        `json:"chat"`
+	Text             string      `json:"text"`
 	Contact          *struct {
 		Phone string `json:"phone_number"`
 		Owner int64  `json:"user_id"`
@@ -167,6 +173,43 @@ func (c *Client) Send(ctx context.Context, chat int64, text tgfmt.HTML, markup r
 	}{chat, string(text), "HTML", markup}, &result)
 	return result.ID, err
 }
+
+// Photo reuses the bot's Telegram file_id; no file download or arbitrary URL.
+func (c *Client) Photo(ctx context.Context, chat int64, fileID string, caption tgfmt.HTML, markup resources.Markup) (int64, error) {
+	var result Message
+	err := c.Call(ctx, "sendPhoto", struct {
+		Chat    int64  `json:"chat_id"`
+		Photo   string `json:"photo"`
+		Caption string `json:"caption"`
+		Parse   string `json:"parse_mode"`
+		Markup  struct {
+			Buttons [][]resources.Button `json:"inline_keyboard"`
+		} `json:"reply_markup"`
+	}{chat, fileID, string(caption), "HTML", struct {
+		Buttons [][]resources.Button `json:"inline_keyboard"`
+	}{markup.InlineKeyboard}}, &result)
+	return result.ID, err
+}
+func (c *Client) RemoveKeyboard(ctx context.Context, chat, message int64) (int64, error) {
+	err := c.Call(ctx, "editMessageReplyMarkup", struct {
+		Chat    int64 `json:"chat_id"`
+		Message int64 `json:"message_id"`
+		Markup  struct {
+			Buttons [][]resources.Button `json:"inline_keyboard"`
+		} `json:"reply_markup"`
+	}{chat, message, struct {
+		Buttons [][]resources.Button `json:"inline_keyboard"`
+	}{[][]resources.Button{}}}, nil)
+	var api *APIError
+	if errors.As(err, &api) && api.NotModified {
+		err = nil
+	}
+	if err != nil {
+		return 0, err
+	}
+	return message, nil
+}
+
 func (c *Client) Edit(ctx context.Context, chat, message int64, text tgfmt.HTML, markup resources.Markup) (int64, error) {
 	// editMessageText accepts only inline markup, including an empty keyboard
 	// to remove stale buttons. Reply-keyboard removal is a send-only operation.

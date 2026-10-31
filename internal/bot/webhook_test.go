@@ -202,3 +202,43 @@ func TestCallbackEditAttestation(t *testing.T) {
 		})
 	}
 }
+
+func TestPhotoCallbackAttestation(t *testing.T) {
+	for _, name := range []string{"owned", "user", "inaccessible", "inline", "text", "no_photo", "group"} {
+		t.Run(name, func(t *testing.T) {
+			sender, date := 1000, 1
+			inline, text, chatType := "", "", "private"
+			photo := []map[string]any{{"file_id": "fixture", "width": 100, "height": 100}}
+			switch name {
+			case "user":
+				sender = 12
+			case "inaccessible":
+				date = 0
+			case "inline":
+				inline = "inline"
+			case "text":
+				text = "not a photo callback"
+			case "no_photo":
+				photo = nil
+			case "group":
+				chatType = "group"
+			}
+			var got *pb.Update
+			p := testPoller(acceptBackend{accept: func(_ context.Context, u *pb.Update) (*pb.Receipt, error) { got = u; return &pb.Receipt{}, nil }})
+			tg := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { _, _ = w.Write([]byte(`{"ok":true,"result":true}`)) }))
+			defer tg.Close()
+			p.Telegram = &telegram.Client{Base: tg.URL + "/", HTTP: tg.Client()}
+			body, _ := json.Marshal(map[string]any{"update_id": 1, "callback_query": map[string]any{"id": "cb", "from": map[string]int{"id": 12}, "data": "qa_1_2", "inline_message_id": inline, "message": map[string]any{"message_id": 99, "date": date, "from": map[string]int{"id": sender}, "chat": map[string]any{"id": 12, "type": chatType}, "text": text, "photo": photo}}})
+			var raw telegram.Update
+			if err := json.Unmarshal(body, &raw); err != nil {
+				t.Fatal(err)
+			}
+			if err := p.Accept(t.Context(), raw); err != nil {
+				t.Fatal(err)
+			}
+			if got.CallbackPhotoEditable != (name == "owned") || got.CallbackMessageEditable {
+				t.Fatal("unsafe photo callback attestation", got)
+			}
+		})
+	}
+}

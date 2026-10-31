@@ -79,3 +79,20 @@ func TestStartPayloadPreserved(t *testing.T) {
 		t.Fatal(p)
 	}
 }
+
+func TestForwardedPhotoConversion(t *testing.T) {
+	var u telegram.Update
+	if err := json.Unmarshal([]byte(`{"update_id":9,"message":{"message_id":5,"from":{"id":10},"chat":{"id":10,"type":"private"},"forward_origin":{"type":"channel"},"caption":"<Вопрос> & ответ?","photo":[{"file_id":"small","width":100,"height":100},{"file_id":"large","width":1280,"height":720},{"file_id":"last-but-smaller","width":200,"height":200}]}}`), &u); err != nil {
+		t.Fatal(err)
+	}
+	got := Convert(u)
+	if got.PhotoFileId != "large" || got.PhotoCaption != "<Вопрос> & ответ?" || got.Text != "" {
+		t.Fatal(got)
+	}
+	// A caption resembling a command must not execute that command.
+	u.Message.Caption = "/question_publish 1"
+	got = Convert(u)
+	if got.Text != "" || got.PhotoCaption != "/question_publish 1" {
+		t.Fatal(got)
+	}
+}

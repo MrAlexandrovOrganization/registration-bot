@@ -148,3 +148,79 @@ func TestPhoneReplyKeyboardDelivery(t *testing.T) {
 		})
 	}
 }
+
+func TestSurveyReplyShowsOnlySavedQuestionnaire(t *testing.T) {
+	tg := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Text string `json:"text"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Error(err)
+		}
+		if r.URL.Path != "/sendMessage" || !strings.Contains(body.Text, resources.Text("registered_title")) || strings.Contains(body.Text, "agreement_1") || strings.Contains(body.Text, "private answer") {
+			t.Error("expected a separate questionnaire without survey data", body.Text)
+		}
+		_, _ = w.Write([]byte(`{"ok":true,"result":{"message_id":700}}`))
+	}))
+	defer tg.Close()
+	backend := &fakeBackend{job: &pb.Delivery{Id: 11, Lease: "fixture", Chat: 42, Kind: "view", View: &pb.View{Kind: "registered", Fields: []*pb.Field{{Key: "name", Value: "Synthetic"}, {Key: "survey_1", Value: "private answer"}}}}}
+	s := &Sender{Backend: backend, Telegram: &telegram.Client{Base: tg.URL + "/", HTTP: tg.Client()}, Limiter: NewLimiter(20, 15), Ready: func(bool) {}, Outcomes: prometheus.NewCounterVec(prometheus.CounterOpts{Name: "fixture_survey_delivery", Help: "test"}, []string{"outcome"})}
+	if err := s.handleID(t.Context(), "worker", 11, false); err != nil {
+		t.Fatal(err)
+	}
+	if backend.completion.Outcome != "sent" {
+		t.Fatal(backend.completion)
+	}
+}
+
+func TestPhotoQuestionDelivery(t *testing.T) {
+	for _, mode := range []string{"send", "clear", "already_cleared"} {
+		t.Run(mode, func(t *testing.T) {
+			tg := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				var body map[string]json.RawMessage
+				if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+					t.Error(err)
+				}
+				if mode == "send" {
+					var caption, photo string
+					_ = json.Unmarshal(body["caption"], &caption)
+					_ = json.Unmarshal(body["photo"], &photo)
+					if r.URL.Path != "/sendPhoto" || photo != "fixture-photo" || caption != "&lt;Фото&gt; &amp; вопрос?" {
+						t.Error("incorrect photo delivery", r.URL.Path, caption, photo)
+					}
+				} else {
+					var markup struct {
+						Buttons [][]resources.Button `json:"inline_keyboard"`
+					}
+					_ = json.Unmarshal(body["reply_markup"], &markup)
+					if r.URL.Path != "/editMessageReplyMarkup" || markup.Buttons == nil || len(markup.Buttons) != 0 {
+						t.Error("photo buttons were not cleared")
+					}
+					if _, ok := body["caption"]; ok {
+						t.Error("caption must remain unchanged")
+					}
+					if mode == "already_cleared" {
+						w.WriteHeader(400)
+						_, _ = w.Write([]byte(`{"ok":false,"error_code":400,"description":"Bad Request: message is not modified"}`))
+						return
+					}
+				}
+				_, _ = w.Write([]byte(`{"ok":true,"result":{"message_id":700}}`))
+			}))
+			defer tg.Close()
+			job := &pb.Delivery{Id: 11, Chat: 42, Lease: "fixture", Kind: "view", View: &pb.View{Kind: "survey_broadcast", Title: "Metadata title", Text: "<Фото> & вопрос?", PhotoFileId: "fixture-photo", Buttons: []*pb.Button{{Label: "Да", Data: "qa_1_2"}}}}
+			if mode != "send" {
+				job.Kind = "survey_remove_keyboard"
+				job.SourceMessage = 700
+			}
+			backend := &fakeBackend{job: job}
+			s := &Sender{Backend: backend, Telegram: &telegram.Client{Base: tg.URL + "/", HTTP: tg.Client()}, Limiter: NewLimiter(20, 15), Ready: func(bool) {}, Outcomes: prometheus.NewCounterVec(prometheus.CounterOpts{Name: "fixture_photo_delivery", Help: "test"}, []string{"outcome"})}
+			if err := s.handleID(t.Context(), "worker", 11, false); err != nil {
+				t.Fatal(err)
+			}
+			if backend.completion.Outcome != "sent" || backend.completion.TelegramMessageId != 700 {
+				t.Fatal(backend.completion)
+			}
+		})
+	}
+}
