@@ -1,0 +1,24 @@
+name: registration-bot-api
+services:
+  bot-api:
+    container_name: registration-bot-api
+    image: ${REGISTRATION_BOT_API_IMAGE:?Run via make}
+    restart: unless-stopped
+    environment:
+      TELEGRAM_API_ID: ${TELEGRAM_API_ID:?required}
+      TELEGRAM_API_HASH: ${TELEGRAM_API_HASH:?required}
+      TELEGRAM_LOCAL: "1"
+    volumes:
+      - bot-api-data:/var/lib/telegram-bot-api
+    networks: [telegram]
+    mem_limit: 128m
+    cpus: 0.25
+    logging:
+      driver: json-file
+      options: {max-size: 10m, max-file: "3"}
+networks:
+  telegram:
+    name: telegram-net
+volumes:
+  bot-api-data:
+    name: registration-bot-api-data

@@ -1,0 +1,11 @@
+services:
+  telegram:
+    networks: !override [api, prometheus, telegram]
+    extra_hosts:
+      - "kafka=${REGISTRATION_KAFKA_HOST:?Set broker tailnet address}"
+    environment:
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://${REGISTRATION_OTLP_HOST:?Set trace tailnet address}:4317
+    mem_limit: 128m
+    mem_reservation: 32m
+    cpus: 0.5
+    oom_score_adj: -500

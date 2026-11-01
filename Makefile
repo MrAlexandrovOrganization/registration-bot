@@ -49,7 +49,7 @@ config-check:
 	env -u BOT_TOKEN -u BACKEND_TOKEN -u TELEGRAM_WEBHOOK_SECRET WEBHOOK_URL=https://example.invalid/telegram $(DOCKER_COMPOSE) --env-file config/test.env config --quiet
 compose-build:
 	$(DOCKER_COMPOSE) build
-up:
+up: active-check
 	$(DOCKER_COMPOSE) up -d --build --wait --wait-timeout 180
 down:
 	$(DOCKER_COMPOSE) down
@@ -79,3 +79,21 @@ compose-layout-check:
 	$(DOCKER_COMPOSE_BASE) --env-file /dev/null -f compose/docker-compose.yml --profile '*' config --no-interpolate --no-env-resolution --quiet
 
 check: compose-layout-check
+
+.PHONY: active-check finland-config-check
+active-check:
+	@test ! -e .retired || { echo 'Retired source: activation refused' >&2; exit 1; }
+finland-config-check:
+	$(DOCKER_COMPOSE_BASE) --env-file config/test.env -f compose/docker-compose.yml -f compose/compose.finland.yml config --no-interpolate --no-env-resolution --quiet
+check: finland-config-check
+
+.PHONY: bot-api-up bot-api-config-check
+bot-api-up: active-check
+	$(DOCKER_COMPOSE_BASE) --env-file .env -f compose/bot-api.finland.yml up -d --wait
+bot-api-config-check:
+	$(DOCKER_COMPOSE_BASE) --env-file /dev/null -f compose/bot-api.finland.yml config --no-interpolate --no-env-resolution --quiet
+check: bot-api-config-check
+
+.PHONY: ci-ssh-deploy
+ci-ssh-deploy:
+	python3 scripts/ci_ssh_deploy.py
