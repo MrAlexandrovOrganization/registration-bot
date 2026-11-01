@@ -1,5 +1,6 @@
 # CI builds/publishes once; VM activates immutable digests (Python 3 + Docker required).
 export IMAGE_COMPOSE_FILE := compose/docker-compose.yml
+export IMAGE_RUNTIME_COMPOSE_FILES = $(if $(or $(strip $(COMPOSE_FILE)),$(strip $(COMPOSE_DOTENV_SELECTION))),$(COMPOSE_FILES))
 IMAGE_COMPOSE ?= $(DOCKER_COMPOSE)
 
 .PHONY: image-build image-publish image-deploy image-activate

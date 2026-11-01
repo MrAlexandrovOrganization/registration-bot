@@ -36,6 +36,13 @@ class DeliveryTests(unittest.TestCase):
         path.write_text(json.dumps(self.manifest))
         os.environ["IMAGE_MANIFEST"] = str(path)
 
+    def test_private_runtime_selector_reaches_activation_without_affecting_build(self):
+        os.environ["IMAGE_RUNTIME_COMPOSE_FILES"] = (
+            "compose/docker-compose.yml compose/compose.finland.yml"
+        )
+        self.assertIn("compose/compose.finland.yml", images.compose(runtime=True))
+        self.assertNotIn("compose/compose.finland.yml", images.compose())
+
     def test_rejects_other_revision_and_mutable_tag(self):
         self.manifest["revision"] = "c" * 40
         with self.assertRaises(ValueError):
