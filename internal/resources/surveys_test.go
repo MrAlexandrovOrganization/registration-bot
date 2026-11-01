@@ -63,3 +63,23 @@ func TestSurveyMessageBounds(t *testing.T) {
 		}
 	}
 }
+
+func TestSurveyAudiencePreview(t *testing.T) {
+	for _, audience := range []string{"all", "registered", "incomplete", "staff", "counselor", "non_counselor", "yes", "maybe"} {
+		for _, code := range []string{"survey_preview_info", "survey_preview_registration"} {
+			text, _ := Render(&pb.View{Kind: "survey_manage", Code: code, Text: audience, Numbers: []int64{17, 23}})
+			if !strings.Contains(string(text), Text("audience_"+audience)) || !strings.Contains(string(text), "23") || !strings.Contains(string(text), "/question_publish 17") || strings.Contains(string(text), "%!") {
+				t.Fatal(text)
+			}
+		}
+	}
+	// Pending previews from the previous backend still render without an audience field.
+	text, _ := Render(&pb.View{Kind: "survey_manage", Code: "survey_preview_info", Numbers: []int64{17, 23}})
+	if strings.Contains(string(text), "audience_") || !strings.Contains(string(text), "/question_publish 17") {
+		t.Fatal(text)
+	}
+	text, markup := Render(&pb.View{Kind: "survey_manage", Code: "survey_audience_prompt", Buttons: []*pb.Button{{LabelKey: "audience_staff", Data: "qg:1:staff"}}})
+	if !strings.Contains(string(text), "все новые участники") || markup.InlineKeyboard[0][0].Text != Text("audience_staff") {
+		t.Fatal(text, markup)
+	}
+}

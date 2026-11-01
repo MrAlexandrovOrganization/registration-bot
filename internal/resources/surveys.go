@@ -24,6 +24,9 @@ func renderSurvey(v *pb.View) tgfmt.HTML {
 		case "survey_preview_info", "survey_preview_registration":
 			if len(v.Numbers) == 2 {
 				plain(fmt.Sprintf(Text(v.Code), v.Numbers[0], v.Numbers[1], v.Numbers[0]))
+				if v.Text != "" {
+					plain(Text("survey_audience_label") + Text("audience_"+v.Text))
+				}
 			}
 		case "survey_existing_open", "survey_existing_closed":
 			if len(v.Numbers) == 2 {
