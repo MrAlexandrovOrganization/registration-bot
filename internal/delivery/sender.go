@@ -153,7 +153,8 @@ func (s *Sender) handleID(ctx context.Context, worker string, id int64, bulk boo
 				}{d.Chat, message, true}, nil)
 			}
 		case "copy":
-			message, err = s.Telegram.Copy(work, d.Chat, d.SourceChat, d.SourceMessage)
+			_, markup := resources.Render(d.View)
+			message, err = s.Telegram.CopyWithMarkup(work, d.Chat, d.SourceChat, d.SourceMessage, markup)
 		case "export":
 			var file *pb.ExportResponse
 			file, err = s.Backend.Export(work, &pb.ExportRequest{Actor: d.Actor})

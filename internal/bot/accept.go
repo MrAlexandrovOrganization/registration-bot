@@ -20,7 +20,7 @@ func (p *Poller) Accept(ctx context.Context, raw telegram.Update) error {
 			m.Date > 0 && m.ID > 0 && m.Chat.ID == u.Chat && m.From.ID == p.BotID &&
 			m.Text != "" && m.Caption == "" && !m.HasMedia && len(m.Photo) == 0
 		u.CallbackPhotoEditable = raw.Callback.InlineMessageID == "" && m != nil && m.Date > 0 && m.ID > 0 &&
-			m.Chat.ID == u.Chat && m.Chat.Type == "private" && m.Chat.ID == u.Actor && m.From.ID == p.BotID && m.Text == "" && len(m.Photo) > 0
+			m.Chat.ID == u.Chat && m.Chat.Type == "private" && m.Chat.ID == u.Actor && m.From.ID == p.BotID && m.Text == "" && (len(m.Photo) > 0 || m.HasFileMedia)
 	}
 	work, span := otel.Tracer("registration-telegram").Start(ctx, "telegram.update")
 	defer span.End()

@@ -110,6 +110,7 @@ type Message struct {
 	Date             int64       `json:"date"`
 	Caption          string      `json:"caption"`
 	HasMedia         bool        `json:"-"`
+	HasFileMedia     bool        `json:"-"`
 	HasPinnedMessage bool        `json:"-"`
 	From             User        `json:"from"`
 	Chat             Chat        `json:"chat"`
@@ -134,6 +135,14 @@ func (m *Message) UnmarshalJSON(data []byte) error {
 	for _, key := range []string{"photo", "animation", "audio", "document", "paid_media", "sticker", "story", "video", "video_note", "voice", "caption"} {
 		if _, ok := fields[key]; ok {
 			decoded.HasMedia = true
+		}
+	}
+	for _, key := range []string{"animation", "audio", "document", "sticker", "video", "video_note", "voice"} {
+		var file struct {
+			ID string `json:"file_id"`
+		}
+		if raw, ok := fields[key]; ok && json.Unmarshal(raw, &file) == nil && file.ID != "" {
+			decoded.HasFileMedia = true
 		}
 	}
 	*m = Message(decoded)
@@ -239,12 +248,21 @@ func (c *Client) Edit(ctx context.Context, chat, message int64, text tgfmt.HTML,
 }
 
 func (c *Client) Copy(ctx context.Context, chat, source, message int64) (int64, error) {
+	return c.CopyWithMarkup(ctx, chat, source, message, resources.Markup{})
+}
+
+func (c *Client) CopyWithMarkup(ctx context.Context, chat, source, message int64, markup resources.Markup) (int64, error) {
+	var inline *resources.Markup
+	if len(markup.InlineKeyboard) > 0 {
+		inline = &resources.Markup{InlineKeyboard: markup.InlineKeyboard}
+	}
 	var result Message
 	err := c.Call(ctx, "copyMessage", struct {
-		Chat    int64 `json:"chat_id"`
-		Source  int64 `json:"from_chat_id"`
-		Message int64 `json:"message_id"`
-	}{chat, source, message}, &result)
+		Chat    int64             `json:"chat_id"`
+		Source  int64             `json:"from_chat_id"`
+		Message int64             `json:"message_id"`
+		Markup  *resources.Markup `json:"reply_markup,omitempty"`
+	}{chat, source, message, inline}, &result)
 	return result.ID, err
 }
 func (c *Client) Document(ctx context.Context, chat int64, data []byte) (int64, error) {

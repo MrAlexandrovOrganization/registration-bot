@@ -204,23 +204,23 @@ func TestCallbackEditAttestation(t *testing.T) {
 }
 
 func TestPhotoCallbackAttestation(t *testing.T) {
-	for _, name := range []string{"owned", "user", "inaccessible", "inline", "text", "no_photo", "group"} {
+	for _, name := range []string{"owned", "user", "inaccessible", "inline", "text", "no_photo", "group", "owned_document", "user_document", "inaccessible_document", "inline_document", "group_document", "caption_only"} {
 		t.Run(name, func(t *testing.T) {
 			sender, date := 1000, 1
 			inline, text, chatType := "", "", "private"
 			photo := []map[string]any{{"file_id": "fixture", "width": 100, "height": 100}}
 			switch name {
-			case "user":
+			case "user", "user_document":
 				sender = 12
-			case "inaccessible":
+			case "inaccessible", "inaccessible_document":
 				date = 0
-			case "inline":
+			case "inline", "inline_document":
 				inline = "inline"
 			case "text":
 				text = "not a photo callback"
-			case "no_photo":
+			case "no_photo", "caption_only":
 				photo = nil
-			case "group":
+			case "group", "group_document":
 				chatType = "group"
 			}
 			var got *pb.Update
@@ -228,7 +228,15 @@ func TestPhotoCallbackAttestation(t *testing.T) {
 			tg := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { _, _ = w.Write([]byte(`{"ok":true,"result":true}`)) }))
 			defer tg.Close()
 			p.Telegram = &telegram.Client{Base: tg.URL + "/", HTTP: tg.Client()}
-			body, _ := json.Marshal(map[string]any{"update_id": 1, "callback_query": map[string]any{"id": "cb", "from": map[string]int{"id": 12}, "data": "qa_1_2", "inline_message_id": inline, "message": map[string]any{"message_id": 99, "date": date, "from": map[string]int{"id": sender}, "chat": map[string]any{"id": 12, "type": chatType}, "text": text, "photo": photo}}})
+			message := map[string]any{"message_id": 99, "date": date, "from": map[string]int{"id": sender}, "chat": map[string]any{"id": 12, "type": chatType}, "text": text, "photo": photo}
+			if strings.HasSuffix(name, "_document") {
+				message["photo"] = nil
+				message["document"] = map[string]any{"file_id": "fixture-document"}
+			}
+			if name == "caption_only" {
+				message["caption"] = "Caption without media"
+			}
+			body, _ := json.Marshal(map[string]any{"update_id": 1, "callback_query": map[string]any{"id": "cb", "from": map[string]int{"id": 12}, "data": "qa_1_2", "inline_message_id": inline, "message": message}})
 			var raw telegram.Update
 			if err := json.Unmarshal(body, &raw); err != nil {
 				t.Fatal(err)
@@ -236,7 +244,7 @@ func TestPhotoCallbackAttestation(t *testing.T) {
 			if err := p.Accept(t.Context(), raw); err != nil {
 				t.Fatal(err)
 			}
-			if got.CallbackPhotoEditable != (name == "owned") || got.CallbackMessageEditable {
+			if got.CallbackPhotoEditable != (name == "owned" || name == "owned_document") || got.CallbackMessageEditable {
 				t.Fatal("unsafe photo callback attestation", got)
 			}
 		})

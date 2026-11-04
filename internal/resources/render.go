@@ -74,6 +74,8 @@ func Render(v *pb.View) (tgfmt.HTML, Markup) {
 		}
 	case "survey_question", "survey_broadcast", "survey_preview", "survey_manage", "survey_notice", "survey_list", "survey_results", "survey_people":
 		parts = append(parts, renderSurvey(v))
+	case "final_manage", "final_status", "final_preview":
+		parts = append(parts, renderFinalConfirmation(v))
 	case "edit":
 		appendText(Text("edit_title"))
 	case "notice":
@@ -147,6 +149,7 @@ func Render(v *pb.View) (tgfmt.HTML, Markup) {
 	}
 	if v.Kind == "help" {
 		appendText("\n\n" + Text("survey_help"))
+		appendText("\n\n" + Text("final_help"))
 	}
 	m := Markup{Remove: true}
 	if len(v.Buttons) > 0 {
