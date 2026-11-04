@@ -38,13 +38,13 @@ func TestFinalConfirmationCopiesWithButtons(t *testing.T) {
 			if r.URL.Path != "/copyMessage" || body.Chat != 12 || body.Source != 1 || body.Message != 777 || body.Text != "" || body.Caption != "" {
 				t.Error("forwarded message must be copied without replacing its content", body)
 			}
-			if len(body.Markup.InlineKeyboard) != 2 || body.Markup.InlineKeyboard[0][0].Text != "Да" || body.Markup.InlineKeyboard[1][0].Text != "Нет" || body.Markup.InlineKeyboard[0][0].CallbackData != callback {
+			if len(body.Markup.InlineKeyboard) != 2 || body.Markup.InlineKeyboard[0][0].Text != "Буду <&> ✅" || body.Markup.InlineKeyboard[1][0].Text != "Пропущу 😢" || body.Markup.InlineKeyboard[0][0].CallbackData != callback {
 				t.Error("missing confirmation buttons", body.Markup)
 			}
 			_, _ = w.Write([]byte(`{"ok":true,"result":{"message_id":888}}`))
 		}))
 		backend := &fakeBackend{job: &pb.Delivery{Id: 11, Lease: "fixture", Chat: 12, Kind: "copy", SourceChat: 1, SourceMessage: 777, View: &pb.View{Kind: kind, Code: "final_invitation", Buttons: []*pb.Button{
-			{LabelKey: "final_yes", Data: callback}, {LabelKey: "final_no", Data: negative},
+			{Label: "Буду <&> ✅", LabelKey: "final_yes", Data: callback}, {Label: "Пропущу 😢", LabelKey: "final_no", Data: negative},
 		}}}}
 		s := &Sender{Backend: backend, Telegram: &telegram.Client{Base: tg.URL + "/", HTTP: tg.Client()}, Limiter: NewLimiter(20, 15), Ready: func(bool) {}, Outcomes: prometheus.NewCounterVec(prometheus.CounterOpts{Name: "fixture_final_copy", Help: "test"}, []string{"outcome"})}
 		if err := s.handleID(t.Context(), "worker", 11, false); err != nil {
