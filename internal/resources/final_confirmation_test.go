@@ -24,3 +24,16 @@ func TestFinalConfirmationRendering(t *testing.T) {
 		}
 	}
 }
+
+func TestFinalDeclinePreview(t *testing.T) {
+	text, markup := Render(&pb.View{Kind: "final_decline_preview", Code: "final_decline_confirm", Fields: []*pb.Field{
+		{Key: "final_decline_person", Value: "<A&B>"}, {Key: "final_decline_id", Value: "42"},
+	}, Buttons: []*pb.Button{
+		{LabelKey: "final_decline_button", Data: "final_decline:42:yes"}, {LabelKey: "cancel", Data: "final_decline_cancel"},
+	}})
+	if strings.Contains(string(text), "<A&B>") || !strings.Contains(string(text), "&lt;A&amp;B&gt;") ||
+		!strings.Contains(string(text), "Telegram ID: 42") || len(markup.InlineKeyboard) != 2 ||
+		markup.InlineKeyboard[0][0].Text != Text("final_decline_button") || markup.InlineKeyboard[0][0].CallbackData != "final_decline:42:yes" {
+		t.Fatal("unsafe or incomplete decline preview", text, markup)
+	}
+}

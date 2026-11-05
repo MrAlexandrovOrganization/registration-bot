@@ -74,7 +74,7 @@ func Render(v *pb.View) (tgfmt.HTML, Markup) {
 		}
 	case "survey_question", "survey_broadcast", "survey_preview", "survey_manage", "survey_notice", "survey_list", "survey_results", "survey_people":
 		parts = append(parts, renderSurvey(v))
-	case "final_manage", "final_status", "final_preview":
+	case "final_manage", "final_status", "final_preview", "final_decline_preview", "final_decline_result":
 		parts = append(parts, renderFinalConfirmation(v))
 	case "edit":
 		appendText(Text("edit_title"))
