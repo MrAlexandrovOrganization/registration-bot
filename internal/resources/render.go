@@ -127,6 +127,10 @@ func Render(v *pb.View) (tgfmt.HTML, Markup) {
 			if v.Field == "final_pending" {
 				key = "preview_final_pending"
 			}
+			switch v.Field {
+			case "final_unanswered", "final_waiting", "agreement_unanswered", "registration_waiting":
+				key = "preview_" + v.Field
+			}
 			appendText(fmt.Sprintf(Text(key), v.Numbers[0], v.Numbers[1], v.Numbers[0], v.Numbers[0]))
 		}
 	case "broadcast_progress":

@@ -150,6 +150,34 @@ func TestFinalPendingPreview(t *testing.T) {
 	}
 }
 
+func TestClosureBroadcastPreviews(t *testing.T) {
+	for audience, description := range map[string]string{
+		"final_unanswered":     "получили второе подтверждение",
+		"final_waiting":        "в очереди после первого «Да»",
+		"agreement_unanswered": "получили первое подтверждение",
+		"registration_waiting": "первое «Да» после закрытия приёма",
+	} {
+		text, markup := Render(&pb.View{Kind: "broadcast_preview", Field: audience, Numbers: []int64{17, 3}})
+		for _, want := range []string{description, "получателей: 3", "/send 17", "/cancel_broadcast 17", "будут пропущены"} {
+			if !strings.Contains(string(text), want) {
+				t.Fatalf("missing %q in %s", want, text)
+			}
+		}
+		if strings.Contains(string(text), "%!") || len(markup.InlineKeyboard) != 0 {
+			t.Fatal("invalid closure preview")
+		}
+	}
+	for code, excerpt := range map[string]string{
+		"closure_waitlist":             "лист ожидания 🥲",
+		"closure_agreement_unanswered": "мы не получили твое подтверждение об участии",
+	} {
+		text, markup := Render(&pb.View{Kind: "notice", Code: code})
+		if !strings.Contains(string(text), excerpt) || !strings.HasSuffix(string(text), "\n\nДо встречи в следующем году!") || len(markup.InlineKeyboard) != 0 {
+			t.Fatal("invalid closure message", text)
+		}
+	}
+}
+
 func TestSourceStats(t *testing.T) {
 	text, _ := Render(&pb.View{Kind: "sources", Numbers: []int64{1, 2}, Fields: []*pb.Field{
 		{Key: "", Value: "3"}, {Key: ":unknown", Value: "4"}, {Key: "<b>A&B</b>", Value: "5"},
