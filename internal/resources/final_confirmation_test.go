@@ -57,7 +57,7 @@ func TestFinalExtraViews(t *testing.T) {
 		t.Fatal("unsafe or incomplete personal invitation preview", text, markup)
 	}
 	text, markup = Render(&pb.View{Kind: "notice", Code: "final_late_saved"})
-	if !strings.Contains(string(text), "место на выезде не предоставлено") || strings.Contains(string(text), "Твоё участие подтверждено") || len(markup.InlineKeyboard) != 0 {
+	if !strings.Contains(string(text), "подтвердить участие не получилось") || strings.Contains(string(text), "Твоё участие подтверждено") || len(markup.InlineKeyboard) != 0 {
 		t.Fatal("late answer was rendered as a successful confirmation", text, markup)
 	}
 }
