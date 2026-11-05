@@ -134,6 +134,22 @@ func TestPublicHelpAndContentErrorsDoNotExposeOperatorCommands(t *testing.T) {
 	}
 }
 
+func TestFinalPendingPreview(t *testing.T) {
+	text, markup := Render(&pb.View{Kind: "broadcast_preview", Field: "final_pending", Numbers: []int64{17, 3}})
+	for _, want := range []string{"напоминания №17", "получателей: 3", "/send 17", "/cancel_broadcast 17", "Ответившие до отправки напоминания будут пропущены"} {
+		if !strings.Contains(string(text), want) {
+			t.Fatalf("missing %q in %s", want, text)
+		}
+	}
+	if strings.Contains(string(text), "%!") || len(markup.InlineKeyboard) != 0 {
+		t.Fatal("invalid reminder preview")
+	}
+	ordinary, _ := Render(&pb.View{Kind: "broadcast_preview", Field: "registered", Numbers: []int64{18, 7}})
+	if strings.Contains(string(ordinary), "напоминания") || !strings.Contains(string(ordinary), "/send 18") {
+		t.Fatal("ordinary preview changed")
+	}
+}
+
 func TestSourceStats(t *testing.T) {
 	text, _ := Render(&pb.View{Kind: "sources", Numbers: []int64{1, 2}, Fields: []*pb.Field{
 		{Key: "", Value: "3"}, {Key: ":unknown", Value: "4"}, {Key: "<b>A&B</b>", Value: "5"},

@@ -123,7 +123,11 @@ func Render(v *pb.View) (tgfmt.HTML, Markup) {
 		}
 	case "broadcast_preview":
 		if len(v.Numbers) >= 2 {
-			appendText(fmt.Sprintf(Text("preview"), v.Numbers[0], v.Numbers[1], v.Numbers[0], v.Numbers[0]))
+			key := "preview"
+			if v.Field == "final_pending" {
+				key = "preview_final_pending"
+			}
+			appendText(fmt.Sprintf(Text(key), v.Numbers[0], v.Numbers[1], v.Numbers[0], v.Numbers[0]))
 		}
 	case "broadcast_progress":
 		if len(v.Numbers) > 0 {
