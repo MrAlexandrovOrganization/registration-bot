@@ -152,6 +152,7 @@ func TestFinalPendingPreview(t *testing.T) {
 
 func TestClosureBroadcastPreviews(t *testing.T) {
 	for audience, description := range map[string]string{
+		"final_confirmed":      "подтвердили участие вторым положительным ответом",
 		"final_unanswered":     "получили второе подтверждение",
 		"final_waiting":        "в очереди после первого «Да»",
 		"agreement_unanswered": "получили первое подтверждение",
