@@ -1,0 +1,17 @@
+{
+  "schema": 1,
+  "service": "registration-bot",
+  "components": [
+    "registration-telegram/*",
+    "registration-bot-api/*"
+  ],
+  "logs": [],
+  "assets": [
+    {
+      "kind": "metrics",
+      "file": "monitoring/prometheus/targets.json",
+      "destination": "registration-telegram.yml",
+      "location": "local"
+    }
+  ]
+}

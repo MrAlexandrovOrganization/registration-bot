@@ -97,3 +97,5 @@ check: bot-api-config-check
 .PHONY: ci-ssh-deploy
 ci-ssh-deploy:
 	python3 scripts/ci_ssh_deploy.py
+
+include makefiles/observability.mk

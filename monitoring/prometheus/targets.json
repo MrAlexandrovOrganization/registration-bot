@@ -1,0 +1,11 @@
+[
+  {
+    "targets": [
+      "registration-telegram:9093"
+    ],
+    "labels": {
+      "project": "registration-telegram",
+      "service": "registration-telegram"
+    }
+  }
+]
